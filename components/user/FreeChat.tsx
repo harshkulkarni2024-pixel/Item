@@ -21,12 +21,14 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
 
     useEffect(() => {
         const history = getChatHistory(user.user_id);
-        const session = startChatSession(user.about_info || '');
+        const formattedHistory = history.map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'model' as 'user' | 'model',
+            parts: [{ text: msg.text }]
+        }));
+        
+        const session = startChatSession(user.about_info || '', formattedHistory);
+
         if (session) {
-            session.history = history.map(msg => ({
-                role: msg.sender === 'user' ? 'user' : 'model',
-                parts: [{ text: msg.text }]
-            }));
             setChat(session);
         }
         setMessages(history);

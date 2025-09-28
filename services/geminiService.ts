@@ -104,7 +104,13 @@ export async function* generateCaptionStream(userAbout: string, scenarioContent:
     }
 };
 
-export const startChatSession = (userAbout: string): Chat | null => {
+// The type for historical messages, matching the format expected by the GenAI SDK
+type FormattedChatMessage = {
+    role: "user" | "model";
+    parts: { text: string }[];
+};
+
+export const startChatSession = (userAbout: string, history: FormattedChatMessage[]): Chat | null => {
     const client = getAiClient();
     if (!client) {
         return null;
@@ -124,6 +130,7 @@ export const startChatSession = (userAbout: string): Chat | null => {
     try {
         return client.chats.create({
             model: 'gemini-2.5-flash',
+            history: history,
             config: {
                 systemInstruction,
             },
