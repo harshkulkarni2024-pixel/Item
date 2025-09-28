@@ -40,7 +40,13 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
 
 
      useEffect(() => {
-        setHistory(getImageHistory(user.user_id));
+        // FIX: Wrap async logic in a function to be called in useEffect
+        const fetchHistory = async () => {
+            // FIX: Await the async call to get image history
+            const userHistory = await getImageHistory(user.user_id);
+            setHistory(userHistory);
+        };
+        fetchHistory();
     }, [user.user_id]);
 
     const blobToBase64 = (blob: Blob): Promise<string> => {
@@ -95,9 +101,11 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
                 result = await generateImage(prompt, aspectRatio, style);
             }
             setCurrentImageUrl(result);
-            saveImageHistory(user.user_id, result);
-            setHistory(getImageHistory(user.user_id));
-            incrementUsage(user.user_id, 'image');
+            // FIX: Await async database operations
+            await saveImageHistory(user.user_id, result);
+            const updatedHistory = await getImageHistory(user.user_id);
+            setHistory(updatedHistory);
+            await incrementUsage(user.user_id, 'image');
             onUserUpdate();
         } catch (e: any) {
             setError(e.message || 'تولید یا ویرایش عکس با خطا مواجه شد.');

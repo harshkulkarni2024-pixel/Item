@@ -8,7 +8,7 @@ const Broadcast: React.FC = () => {
     const [isSending, setIsSending] = useState(false);
     const [feedback, setFeedback] = useState('');
 
-    const handleSend = () => {
+    const handleSend = async () => {
         if (!message.trim()) {
             setFeedback('پیام نمی‌تواند خالی باشد.');
             return;
@@ -16,8 +16,10 @@ const Broadcast: React.FC = () => {
 
         setIsSending(true);
         try {
-            addBroadcast(message);
-            const users = getAllUsers();
+            // FIX: Await async database operations
+            await addBroadcast(message);
+            const users = await getAllUsers();
+            // FIX: `users` is now a resolved array, so .length can be accessed
             setFeedback(`پیام با موفقیت برای ${users.length} کاربر ارسال شد.`);
             setMessage('');
         } catch (e) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { User } from '../../types';
+import { User, PostScenario } from '../../types';
 import * as db from '../../services/dbService';
 import { generateCaptionStream, AI_INIT_ERROR } from '../../services/geminiService';
 import { Loader } from '../common/Loader';
@@ -13,30 +13,38 @@ interface PostScenariosProps {
 }
 
 const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUserUpdate }) => {
-    const [scenarios, setScenarios] = useState(db.getScenariosForUser(user.user_id));
-    const [selectedScenario, setSelectedScenario] = useState<ReturnType<typeof db.getScenarioById>>(null);
+    // FIX: Initialize state with an empty array; data will be fetched in useEffect
+    const [scenarios, setScenarios] = useState<PostScenario[]>([]);
+    // FIX: The state should hold the resolved object type, not the promise type
+    const [selectedScenario, setSelectedScenario] = useState<PostScenario | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState('');
     const [error, setError] = useState('');
 
-    const refreshScenarios = useCallback(() => {
-        setScenarios(db.getScenariosForUser(user.user_id));
+    const refreshScenarios = useCallback(async () => {
+        // FIX: Await the async fetch call and update the state with the result
+        const userScenarios = await db.getScenariosForUser(user.user_id);
+        setScenarios(userScenarios);
         onUserUpdate(); // Refresh parent component's user state to update notification counts
     }, [user.user_id, onUserUpdate]);
 
     useEffect(() => {
+        // FIX: Call the async function to fetch data on component mount
+        refreshScenarios();
         db.clearUserNotifications('scenarios', user.user_id);
         onUserUpdate();
-    }, [onUserUpdate, user.user_id]);
+    }, [refreshScenarios, onUserUpdate, user.user_id]);
 
     const handleRecord = async (scenarioId: number) => {
         setIsLoading(true);
         setError('');
         setNotification('عالی! در حال تولید کپشن برای شما...');
-        const scenarioToProcess = db.getScenarioById(scenarioId);
+        // FIX: Await the promise to get the scenario object before using it
+        const scenarioToProcess = await db.getScenarioById(scenarioId);
         if (scenarioToProcess) {
             try {
                 let captionContent = '';
+                // FIX: Accessing property on resolved object is now safe
                 const stream = generateCaptionStream(user.about_info || '', scenarioToProcess.content);
                 for await (const chunk of stream) {
                     if (chunk.includes(AI_INIT_ERROR)) {
@@ -46,9 +54,10 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
                 }
                 
                 if (captionContent.trim()) {
+                    // FIX: Accessing properties on resolved object is now safe
                     const captionTitle = `کپشن سناریو شماره ${scenarioToProcess.scenario_number}`;
-                    db.addCaption(user.user_id, captionTitle, captionContent, scenarioToProcess.content);
-                    db.logActivity(user.user_id, `سناریو شماره ${scenarioToProcess.scenario_number} را تایید کرد.`);
+                    await db.addCaption(user.user_id, captionTitle, captionContent, scenarioToProcess.content);
+                    await db.logActivity(user.user_id, `سناریو شماره ${scenarioToProcess.scenario_number} را تایید کرد.`);
                     setNotification(`آفرین! کپشن برای سناریو شماره ${scenarioToProcess.scenario_number} تولید شد. می‌تونی تو بخش «کپشن‌ها» پیداش کنی.`);
                 } else {
                      throw new Error("پاسخ خالی از هوش مصنوعی دریافت شد.");
@@ -61,7 +70,7 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
                 setNotification('');
             } finally {
                 // The scenario is deleted regardless of caption success, as the user has "recorded" it.
-                db.deleteScenario(scenarioId);
+                await db.deleteScenario(scenarioId);
                 refreshScenarios();
                 setSelectedScenario(null);
                 setIsLoading(false);

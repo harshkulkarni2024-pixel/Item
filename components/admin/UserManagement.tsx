@@ -10,25 +10,30 @@ interface UserManagementProps {
 }
 
 const UserManagement: React.FC<UserManagementProps> = ({ onSelectUser, onLogout }) => {
+  // FIX: Initialize state with an empty array; data will be fetched in useEffect
   const [users, setUsers] = useState<User[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUser, setNewUser] = useState({ name: '', code: '' });
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
-  const refreshUsers = useCallback(() => {
-    setUsers(db.getAllUsers());
+  const refreshUsers = useCallback(async () => {
+    // FIX: Await the async fetch call and update state with the result
+    const allUsers = await db.getAllUsers();
+    setUsers(allUsers);
   }, []);
 
   useEffect(() => {
     refreshUsers();
   }, [refreshUsers]);
   
-  const handleAddUser = () => {
+  const handleAddUser = async () => {
       if (!newUser.name || !newUser.code) {
           setNotification({ type: 'error', message: 'نام و کد دسترسی هر دو الزامی هستند.' });
           return;
       }
-      const result = db.addUser(newUser.name, newUser.code);
+      // FIX: Await the async database operation
+      const result = await db.addUser(newUser.name, newUser.code);
+      // FIX: The `result` variable is now a resolved object, so its properties can be accessed
       setNotification({ type: result.success ? 'success' : 'error', message: result.message });
       if (result.success) {
           refreshUsers();
@@ -38,9 +43,10 @@ const UserManagement: React.FC<UserManagementProps> = ({ onSelectUser, onLogout 
       }
   };
   
-  const handleDeleteUser = (userId: number) => {
+  const handleDeleteUser = async (userId: number) => {
       if (window.confirm('آیا از حذف این کاربر و تمام اطلاعات او مطمئن هستید؟ این عمل غیرقابل بازگشت است.')) {
-          db.deleteUser(userId);
+          // FIX: Await the async database operation
+          await db.deleteUser(userId);
           setNotification({type: 'success', message: 'کاربر با موفقیت حذف شد.'});
           refreshUsers();
           setTimeout(() => setNotification(null), 3000);

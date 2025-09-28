@@ -19,7 +19,13 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ user, onUserUpdate }) =
     const [error, setError] = useState('');
 
     useEffect(() => {
-        setHistory(getStoryHistory(user.user_id));
+        // FIX: Wrap async logic in a function to be called in useEffect
+        const fetchHistory = async () => {
+            // FIX: Await the async call to get story history
+            const userHistory = await getStoryHistory(user.user_id);
+            setHistory(userHistory);
+        };
+        fetchHistory();
     }, [user.user_id]);
 
     const handleGenerate = async () => {
@@ -44,9 +50,11 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ user, onUserUpdate }) =
                 fullScenario += chunk;
                 setCurrentScenario(prev => prev + chunk);
             }
-            saveStoryHistory(user.user_id, fullScenario);
-            setHistory(getStoryHistory(user.user_id));
-            incrementUsage(user.user_id, 'story');
+            // FIX: Await async database operations
+            await saveStoryHistory(user.user_id, fullScenario);
+            const updatedHistory = await getStoryHistory(user.user_id);
+            setHistory(updatedHistory);
+            await incrementUsage(user.user_id, 'story');
             onUserUpdate();
         } catch (e) {
             setError('تولید سناریو با خطا مواجه شد. لطفاً دوباره تلاش کنید.');

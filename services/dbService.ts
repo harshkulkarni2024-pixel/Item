@@ -1,537 +1,354 @@
-import { User, PostScenario, Plan, Report, Caption, PostIdea, BroadcastMessage, ActivityLog, UserChatHistory, UserStoryHistory, UserImageHistory, ChatMessage } from '../types';
+import { User, PostScenario, Plan, Report, Caption, PostIdea, BroadcastMessage, ActivityLog, ChatMessage } from '../types';
+import { supabase } from './supabaseClient';
 
-interface DB {
-  users: User[];
-  post_scenarios: PostScenario[];
-  plans: Plan[];
-  reports: Report[];
-  captions: Caption[];
-  post_ideas: PostIdea[];
-  broadcasts: BroadcastMessage[];
-  activity_logs: ActivityLog[];
-  chat_history: UserChatHistory[];
-  story_history: UserStoryHistory[];
-  image_history: UserImageHistory[];
-}
-
-const DB_KEY = 'item_bot_db';
+// --- Constants ---
 const ADMIN_IDS = [1337]; 
 const ADMIN_ACCESS_CODE = 'A12';
-const TEST_USER_ACCESS_CODE = 'N1';
-const TEST_USER_FULL_NAME = 'کاربر تست';
 
-const getDB = (): DB => {
-  const dbJson = localStorage.getItem(DB_KEY);
-  const defaultDB: DB = {
-    users: [],
-    post_scenarios: [],
-    plans: [],
-    reports: [],
-    captions: [],
-    post_ideas: [],
-    broadcasts: [],
-    activity_logs: [],
-    chat_history: [],
-    story_history: [],
-    image_history: [],
-  };
+// --- Helper Functions ---
+const handleError = (error: any, context: string) => {
+    console.error(`Supabase error in ${context}:`, error);
+    return null;
+}
 
-  if (!dbJson) {
-    return defaultDB;
-  }
-
-  try {
-    const parsed = JSON.parse(dbJson);
-    
-    // Perform deep validation and sanitization. This is crucial to prevent crashes
-    // from corrupted localStorage data, e.g., an array containing `null`.
-    const sanitizedDB: DB = { ...defaultDB };
-    
-    if (parsed && typeof parsed === 'object') {
-        const sanitize = (arr: any) => Array.isArray(arr) ? arr.filter((item: any) => item && typeof item === 'object') : [];
-        
-        sanitizedDB.users = sanitize(parsed.users);
-        sanitizedDB.post_scenarios = sanitize(parsed.post_scenarios);
-        sanitizedDB.plans = sanitize(parsed.plans);
-        sanitizedDB.reports = sanitize(parsed.reports);
-        sanitizedDB.captions = sanitize(parsed.captions);
-        sanitizedDB.post_ideas = sanitize(parsed.post_ideas);
-        sanitizedDB.broadcasts = sanitize(parsed.broadcasts);
-        sanitizedDB.activity_logs = sanitize(parsed.activity_logs);
-        sanitizedDB.chat_history = sanitize(parsed.chat_history);
-        sanitizedDB.story_history = sanitize(parsed.story_history);
-        sanitizedDB.image_history = sanitize(parsed.image_history);
-    } else {
-        // If parsed is not an object, data is fundamentally corrupt.
-        throw new Error("Invalid DB structure in localStorage (not an object).");
-    }
-
-    return sanitizedDB;
-  } catch (error) {
-    console.error("Failed to parse or validate DB from localStorage. Resetting DB.", error);
-    localStorage.removeItem(DB_KEY);
-    return defaultDB;
-  }
-};
-
-const saveDB = (db: DB) => {
-  try {
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-  } catch (error)    {
-    console.error("Failed to save data to localStorage. Storage might be full or permissions are denied.", error);
-  }
-};
-
-export const initializeDB = () => {
-  try {
-    let db = getDB();
-    let dbNeedsUpdate = false;
-
-    // --- Admin User Validation ---
-    let adminUser = db.users.find(u => isUserAdmin(u.user_id));
-    const impostorAdmins = db.users.filter(u => u.access_code === ADMIN_ACCESS_CODE && !isUserAdmin(u.user_id));
-
-    if (impostorAdmins.length > 0) {
-      db.users = db.users.filter(u => u.access_code !== ADMIN_ACCESS_CODE || isUserAdmin(u.user_id));
-      dbNeedsUpdate = true;
-      console.warn(`Removed ${impostorAdmins.length} conflicting user(s) with admin access code.`);
-    }
-
-    if (adminUser) {
-      if (adminUser.access_code !== ADMIN_ACCESS_CODE || adminUser.is_verified !== 1) {
-        console.warn("Admin user found but is invalid. Correcting...");
-        adminUser.access_code = ADMIN_ACCESS_CODE;
-        adminUser.is_verified = 1;
-        dbNeedsUpdate = true;
-      }
-    } else {
-      console.warn("Admin user not found, creating a new admin.");
-      const newAdminUser: User = {
-        user_id: ADMIN_IDS[0],
-        full_name: 'مدیر',
-        access_code: ADMIN_ACCESS_CODE,
-        is_verified: 1,
-        story_requests: 0,
-        image_requests: 0,
-        chat_messages: 0,
-        last_request_date: new Date().toISOString().split('T')[0],
-      };
-      db.users.push(newAdminUser);
-      dbNeedsUpdate = true;
-    }
-
-    // --- Default Test User Creation ---
-    const testUserExists = db.users.some(u => u.access_code === TEST_USER_ACCESS_CODE);
-    if (!testUserExists) {
-        console.warn("Test user not found, creating a new one.");
-        const newTestUser: User = {
-            user_id: Date.now() + 1, // Add 1 to avoid potential collision with other timestamps
-            full_name: TEST_USER_FULL_NAME,
-            access_code: TEST_USER_ACCESS_CODE,
-            is_verified: 1,
-            story_requests: 0,
-            image_requests: 0,
-            chat_messages: 0,
-            last_request_date: new Date().toISOString().split('T')[0],
-            about_info: 'این یک کاربر تستی است.',
-        };
-        db.users.push(newTestUser);
-        dbNeedsUpdate = true;
-    }
-
-
-    if (dbNeedsUpdate) {
-      saveDB(db);
-    }
-  } catch (error) {
-      // This is a last resort if initialization itself fails.
-      console.error("Critical error during DB initialization. Attempting to reset DB.", error);
-      try {
-          localStorage.removeItem(DB_KEY);
-          const freshDB: DB = {
-              users: [
-                  {
-                    user_id: ADMIN_IDS[0],
-                    full_name: 'مدیر',
-                    access_code: ADMIN_ACCESS_CODE,
-                    is_verified: 1,
-                    story_requests: 0,
-                    image_requests: 0,
-                    chat_messages: 0,
-                    last_request_date: new Date().toISOString().split('T')[0],
-                  },
-              ],
-              post_scenarios: [], plans: [], reports: [], captions: [], post_ideas: [], broadcasts: [],
-              activity_logs: [], chat_history: [], story_history: [], image_history: []
-          };
-          // Also create test user in the fresh DB
-          const newTestUser: User = {
-              user_id: Date.now() + 1,
-              full_name: TEST_USER_FULL_NAME,
-              access_code: TEST_USER_ACCESS_CODE,
-              is_verified: 1,
-              story_requests: 0,
-              image_requests: 0,
-              chat_messages: 0,
-              last_request_date: new Date().toISOString().split('T')[0],
-              about_info: 'این یک کاربر تستی است.',
-          };
-          freshDB.users.push(newTestUser);
-          saveDB(freshDB);
-      } catch (finalError) {
-          console.error("FATAL: Could not reset the DB. The application might not work correctly.", finalError);
-      }
-  }
-};
-
-export const logActivity = (userId: number, action: string): void => {
-    let db = getDB();
-    const user = db.users.find(u => u.user_id === userId);
-    // Don't log admin activity or non-existent users
-    if (user && !isUserAdmin(userId)) {
-        const logEntry: ActivityLog = {
-            id: Date.now(),
-            user_id: userId,
-            user_full_name: user.full_name,
-            action: action,
-            timestamp: new Date().toISOString(),
-        };
-        db.activity_logs.unshift(logEntry); // Add to the beginning of the array
-        // Limit the log size to prevent localStorage from filling up
-        if (db.activity_logs.length > 100) {
-            db.activity_logs.pop();
-        }
-        saveDB(db);
-    }
-};
-
-
+// --- User Management ---
 export const isUserAdmin = (userId: number): boolean => ADMIN_IDS.includes(userId);
 
-export const verifyAccessCode = (code: string, isSessionLogin: boolean = false): User | null => {
-    const db = getDB();
-    let user: User | undefined;
-
+export const verifyAccessCode = async (code: string, isSessionLogin: boolean = false): Promise<User | null> => {
+    let query;
     if (isSessionLogin) {
         const userId = parseInt(code, 10);
         if (isNaN(userId)) return null;
-        user = db.users.find(u => u.user_id === userId && u.is_verified === 1);
+        query = supabase.from('users').select('*').eq('user_id', userId).eq('is_verified', true).single();
     } else {
-        user = db.users.find(u => u.access_code === code && u.is_verified === 1);
+        query = supabase.from('users').select('*').eq('access_code', code).eq('is_verified', true).single();
     }
-    
-    if (user) {
-        const today = new Date().toISOString().split('T')[0];
-        if (user.last_request_date !== today) {
+
+    const { data: user, error } = await query;
+    if (error || !user) {
+        if (error && error.code !== 'PGRST116') { // Ignore "no rows found" error for logging
+             handleError(error, 'verifyAccessCode');
+        }
+        return null;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (user.last_request_date !== today) {
+        const { error: updateError } = await supabase.from('users').update({
+            story_requests: 0,
+            image_requests: 0,
+            chat_messages: 0,
+            last_request_date: today
+        }).eq('user_id', user.user_id);
+
+        if (updateError) handleError(updateError, 'verifyAccessCode:updateUsage');
+        else {
             user.story_requests = 0;
             user.image_requests = 0;
             user.chat_messages = 0;
             user.last_request_date = today;
-            saveDB(db);
-        }
-        if(!isSessionLogin) { // Only log manual logins, not session refreshes
-            logActivity(user.user_id, 'به برنامه وارد شد.');
         }
     }
-    return user || null;
+    
+    if(!isSessionLogin) {
+        await logActivity(user.user_id, 'به برنامه وارد شد.');
+    }
+
+    return user;
 };
 
-export const getAllUsers = (): User[] => getDB().users.filter(u => !isUserAdmin(u.user_id));
+export const getAllUsers = async (): Promise<User[]> => {
+    const { data, error } = await supabase.from('users').select('*').neq('user_id', ADMIN_IDS[0]);
+    if (error) handleError(error, 'getAllUsers');
+    return data || [];
+};
 
-export const getUserById = (userId: number): User | null => getDB().users.find(u => u.user_id === userId) || null;
+export const getUserById = async (userId: number): Promise<User | null> => {
+    const { data, error } = await supabase.from('users').select('*').eq('user_id', userId).single();
+    if (error) handleError(error, 'getUserById');
+    return data;
+};
 
-export const addUser = (fullName: string, accessCode: string): { success: boolean, message: string } => {
-    const db = getDB();
-    if (db.users.some(u => u.access_code === accessCode)) {
+export const addUser = async (fullName: string, accessCode: string): Promise<{ success: boolean, message: string }> => {
+    const { data: existingUser, error: checkError } = await supabase.from('users').select('user_id').eq('access_code', accessCode).single();
+    if (checkError && checkError.code !== 'PGRST116') {
+        handleError(checkError, 'addUser:check');
+        return { success: false, message: 'خطا در بررسی کد دسترسی.' };
+    }
+    if (existingUser) {
         return { success: false, message: 'این کد دسترسی قبلاً استفاده شده است.' };
     }
-    const newUser: User = {
-        user_id: Date.now(),
+
+    const newUser: Omit<User, 'user_id'> & { user_id?: number } = {
         full_name: fullName,
         access_code: accessCode,
-        is_verified: 1, // Web app users are verified on creation by admin
+        is_verified: 1,
         story_requests: 0,
         image_requests: 0,
         chat_messages: 0,
         last_request_date: new Date().toISOString().split('T')[0],
         about_info: '',
     };
-    db.users.push(newUser);
-    saveDB(db);
-    return { success: true, message: `کاربر '${fullName}' با موفقیت اضافه شد.` };
-}
-
-export const deleteUser = (userId: number): void => {
-    let db = getDB();
-    db.users = db.users.filter(u => u.user_id !== userId);
-    db.post_scenarios = db.post_scenarios.filter(p => p.user_id !== userId);
-    db.plans = db.plans.filter(p => p.user_id !== userId);
-    db.reports = db.reports.filter(r => r.user_id !== userId);
-    db.captions = db.captions.filter(c => c.user_id !== userId);
-    db.post_ideas = db.post_ideas.filter(i => i.user_id !== userId);
-    db.activity_logs = db.activity_logs.filter(l => l.user_id !== userId);
-    db.chat_history = db.chat_history.filter(h => h.user_id !== userId);
-    db.story_history = db.story_history.filter(h => h.user_id !== userId);
-    db.image_history = db.image_history.filter(h => h.user_id !== userId);
-    saveDB(db);
-}
-
-export const updateUserAbout = (userId: number, about: string): void => {
-    let db = getDB();
-    const user = db.users.find(u => u.user_id === userId);
-    if (user) {
-        user.about_info = about;
-        saveDB(db);
+    
+    // Generate a unique user_id that isn't an admin id
+    newUser.user_id = Date.now();
+    
+    const { error } = await supabase.from('users').insert(newUser);
+    if (error) {
+        handleError(error, 'addUser:insert');
+        return { success: false, message: 'خطا در افزودن کاربر.' };
     }
-}
+    return { success: true, message: `کاربر '${fullName}' با موفقیت اضافه شد.` };
+};
+
+export const deleteUser = async (userId: number): Promise<void> => {
+    const { error } = await supabase.from('users').delete().eq('user_id', userId);
+    if (error) handleError(error, 'deleteUser');
+    // Note: Cascading deletes should be set up in Supabase to handle related data.
+};
+
+export const updateUserAbout = async (userId: number, about: string): Promise<void> => {
+    const { error } = await supabase.from('users').update({ about_info: about }).eq('user_id', userId);
+    if (error) handleError(error, 'updateUserAbout');
+};
 
 // --- Usage Tracking ---
-export const incrementUsage = (userId: number, type: 'story' | 'image' | 'chat'): void => {
-    let db = getDB();
-    const user = db.users.find(u => u.user_id === userId);
-    if (user) {
-        const today = new Date().toISOString().split('T')[0];
-        if (user.last_request_date !== today) {
-            user.story_requests = 0;
-            user.image_requests = 0;
-            user.chat_messages = 0;
-            user.last_request_date = today;
-        }
+export const incrementUsage = async (userId: number, type: 'story' | 'image' | 'chat'): Promise<void> => {
+    const user = await getUserById(userId);
+    if (!user) return;
 
-        let action = '';
-        if (type === 'story') {
-            user.story_requests += 1;
-            action = `یک سناریوی استوری (${user.story_requests}/1) تولید کرد.`;
-        } else if (type === 'image') {
-            user.image_requests += 1;
-            action = `یک تصویر (${user.image_requests}/5) تولید کرد.`;
-        } else if (type === 'chat') {
-            user.chat_messages += 1;
-            action = `یک پیام در چت (${user.chat_messages}/10) ارسال کرد.`;
-        }
-        saveDB(db);
-        logActivity(userId, action);
+    let columnToIncrement: 'story_requests' | 'image_requests' | 'chat_messages' = 'chat_messages';
+    let action = '';
+    
+    if (type === 'story') { 
+        columnToIncrement = 'story_requests';
+        action = `یک سناریوی استوری (${user.story_requests + 1}/1) تولید کرد.`;
+    }
+    else if (type === 'image') {
+        columnToIncrement = 'image_requests';
+        action = `یک تصویر (${user.image_requests + 1}/5) تولید کرد.`;
+    }
+    else if (type === 'chat') {
+        columnToIncrement = 'chat_messages';
+        action = `یک پیام در چت (${user.chat_messages + 1}/10) ارسال کرد.`;
+    }
+
+    const { error } = await supabase.rpc('increment_usage', {
+      p_user_id: userId,
+      p_column: columnToIncrement
+    });
+    
+    if (error) {
+      handleError(error, `incrementUsage:${type}`);
+    } else {
+      await logActivity(userId, action);
     }
 };
 
 // --- Plans ---
-export const getPlanForUser = (userId: number): Plan | null => getDB().plans.find(p => p.user_id === userId) || null;
-
-export const savePlanForUser = (userId: number, content: string): void => {
-    let db = getDB();
-    let plan = db.plans.find(p => p.user_id === userId);
-    if (plan) {
-        plan.content = content;
-        plan.timestamp = new Date().toISOString();
-    } else {
-        db.plans.push({ id: Date.now(), user_id: userId, content, timestamp: new Date().toISOString() });
-    }
-    saveDB(db);
+export const getPlanForUser = async (userId: number): Promise<Plan | null> => {
+    const { data, error } = await supabase.from('plans').select('*').eq('user_id', userId).maybeSingle();
+    if (error) handleError(error, 'getPlanForUser');
+    return data;
 };
 
-export const deletePlanForUser = (userId: number): void => {
-    let db = getDB();
-    db.plans = db.plans.filter(p => p.user_id !== userId);
-    saveDB(db);
-}
+export const savePlanForUser = async (userId: number, content: string): Promise<void> => {
+    const { error } = await supabase.from('plans').upsert({ user_id: userId, content, timestamp: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (error) handleError(error, 'savePlanForUser');
+};
+
+export const deletePlanForUser = async (userId: number): Promise<void> => {
+    const { error } = await supabase.from('plans').delete().eq('user_id', userId);
+    if (error) handleError(error, 'deletePlanForUser');
+};
 
 // --- Reports ---
-export const getReportsForUser = (userId: number): Report[] => {
-    return getDB().reports.filter(r => r.user_id === userId)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+export const getReportsForUser = async (userId: number): Promise<Report[]> => {
+    const { data, error } = await supabase.from('reports').select('*').eq('user_id', userId).order('timestamp', { ascending: false });
+    if (error) handleError(error, 'getReportsForUser');
+    return data || [];
 };
 
-export const saveReportForUser = (userId: number, content: string): void => {
-    let db = getDB();
-    // Always add a new report, don't update existing.
-    db.reports.push({ id: Date.now(), user_id: userId, content, timestamp: new Date().toISOString() });
-    saveDB(db);
+export const saveReportForUser = async (userId: number, content: string): Promise<void> => {
+    const { error } = await supabase.from('reports').insert({ user_id: userId, content, timestamp: new Date().toISOString() });
+    if (error) handleError(error, 'saveReportForUser');
 };
 
-export const deleteReportForUser = (userId: number): void => {
-    let db = getDB();
-    db.reports = db.reports.filter(r => r.user_id !== userId);
-    saveDB(db);
+export const deleteReportForUser = async (userId: number): Promise<void> => {
+    const { data, error } = await supabase.from('reports').delete().eq('user_id', userId);
+    if (error) handleError(error, 'deleteReportForUser');
 };
 
 // --- Scenarios ---
-export const getScenariosForUser = (userId: number): PostScenario[] => getDB().post_scenarios.filter(p => p.user_id === userId).sort((a, b) => a.scenario_number - b.scenario_number);
-export const getScenarioById = (id: number): PostScenario | null => getDB().post_scenarios.find(p => p.id === id) || null;
-export const addScenarioForUser = (userId: number, scenarioNumber: number, content: string): void => {
-    let db = getDB();
-    db.post_scenarios.push({ id: Date.now(), user_id: userId, scenario_number: scenarioNumber, content });
-    saveDB(db);
+export const getScenariosForUser = async (userId: number): Promise<PostScenario[]> => {
+    const { data, error } = await supabase.from('scenarios').select('*').eq('user_id', userId).order('scenario_number', { ascending: true });
+    if (error) handleError(error, 'getScenariosForUser');
+    return data || [];
 };
-export const deleteScenario = (scenarioId: number): void => {
-    let db = getDB();
-    db.post_scenarios = db.post_scenarios.filter(p => p.id !== scenarioId);
-    saveDB(db);
+export const getScenarioById = async (id: number): Promise<PostScenario | null> => {
+    const { data, error } = await supabase.from('scenarios').select('*').eq('id', id).single();
+    if (error) handleError(error, 'getScenarioById');
+    return data || null;
+}
+export const addScenarioForUser = async (userId: number, scenarioNumber: number, content: string): Promise<void> => {
+    const { error } = await supabase.from('scenarios').insert({ user_id: userId, scenario_number: scenarioNumber, content });
+    if (error) handleError(error, 'addScenarioForUser');
+};
+export const deleteScenario = async (scenarioId: number): Promise<void> => {
+    const { error } = await supabase.from('scenarios').delete().eq('id', scenarioId);
+    if (error) handleError(error, 'deleteScenario');
 };
 
 // --- Ideas ---
-export const getIdeasForUser = (userId: number): PostIdea[] => getDB().post_ideas.filter(i => i.user_id === userId);
-export const addIdeaForUser = (userId: number, ideaText: string): void => {
-    let db = getDB();
-    db.post_ideas.push({ id: Date.now(), user_id: userId, idea_text: ideaText });
-    saveDB(db);
-    logActivity(userId, 'یک ایده پست جدید ارسال کرد.');
+export const getIdeasForUser = async (userId: number): Promise<PostIdea[]> => {
+    const { data, error } = await supabase.from('ideas').select('*').eq('user_id', userId);
+    if (error) handleError(error, 'getIdeasForUser');
+    return data || [];
 };
-export const deleteIdea = (ideaId: number): void => {
-    let db = getDB();
-    db.post_ideas = db.post_ideas.filter(i => i.id !== ideaId);
-    saveDB(db);
+export const addIdeaForUser = async (userId: number, ideaText: string): Promise<void> => {
+    const { error } = await supabase.from('ideas').insert({ user_id: userId, idea_text: ideaText });
+    if (error) handleError(error, 'addIdeaForUser:insert');
+    else await logActivity(userId, 'یک ایده پست جدید ارسال کرد.');
+};
+export const deleteIdea = async (ideaId: number): Promise<void> => {
+    const { error } = await supabase.from('ideas').delete().eq('id', ideaId);
+    if (error) handleError(error, 'deleteIdea');
 };
 
 // --- Captions ---
-export const getCaptionsForUser = (userId: number): Caption[] => getDB().captions.filter(c => c.user_id === userId).sort((a, b) => b.id - a.id);
-export const addCaption = (userId: number, title: string, content: string, originalScenarioContent: string): void => {
-    let db = getDB();
-    db.captions.push({ id: Date.now(), user_id: userId, title, content, original_scenario_content: originalScenarioContent });
-    saveDB(db);
+export const getCaptionsForUser = async (userId: number): Promise<Caption[]> => {
+    const { data, error } = await supabase.from('captions').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+    if (error) handleError(error, 'getCaptionsForUser');
+    return data || [];
+};
+export const addCaption = async (userId: number, title: string, content: string, originalScenarioContent: string): Promise<void> => {
+    const { error } = await supabase.from('captions').insert({ user_id: userId, title, content, original_scenario_content: originalScenarioContent });
+    if (error) handleError(error, 'addCaption');
 };
 
 // --- Broadcasts ---
-export const getLatestBroadcast = (): BroadcastMessage | null => {
-    const db = getDB();
-    if (db.broadcasts.length === 0) return null;
-    return db.broadcasts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+export const getLatestBroadcast = async (): Promise<BroadcastMessage | null> => {
+    const { data, error } = await supabase.from('broadcasts').select('*').order('timestamp', { ascending: false }).limit(1).single();
+    if (error && error.code !== 'PGRST116') handleError(error, 'getLatestBroadcast');
+    return data;
 };
-
-export const addBroadcast = (message: string): void => {
-    let db = getDB();
-    db.broadcasts.push({ id: Date.now(), message, timestamp: new Date().toISOString() });
-    saveDB(db);
+export const addBroadcast = async (message: string): Promise<void> => {
+    const { error } = await supabase.from('broadcasts').insert({ message, timestamp: new Date().toISOString() });
+    if (error) handleError(error, 'addBroadcast');
 };
 
 // --- Activity Log ---
-export const getActivityLogs = (): ActivityLog[] => {
-    return getDB().activity_logs;
-};
-
-// --- History ---
-export const getChatHistory = (userId: number): ChatMessage[] => {
-    const db = getDB();
-    return db.chat_history.find(h => h.user_id === userId)?.messages || [];
-};
-export const saveChatHistory = (userId: number, messages: ChatMessage[]): void => {
-    let db = getDB();
-    let userHistory = db.chat_history.find(h => h.user_id === userId);
-    if (userHistory) {
-        userHistory.messages = messages;
-    } else {
-        db.chat_history.push({ user_id: userId, messages });
+export const logActivity = async (userId: number, action: string): Promise<void> => {
+    if (isUserAdmin(userId)) return;
+    const user = await getUserById(userId);
+    if (user) {
+        const logEntry = {
+            user_id: userId,
+            user_full_name: user.full_name,
+            action: action,
+        };
+        const { error } = await supabase.from('activity_logs').insert(logEntry);
+        if (error) handleError(error, 'logActivity');
     }
-    saveDB(db);
 };
 
-export const getStoryHistory = (userId: number): { id: number; content: string }[] => {
-    const db = getDB();
-    return db.story_history.find(h => h.user_id === userId)?.stories || [];
+export const getActivityLogs = async (): Promise<ActivityLog[]> => {
+    const { data, error } = await supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(100);
+    if (error) handleError(error, 'getActivityLogs');
+    return data || [];
 };
-export const saveStoryHistory = (userId: number, storyContent: string): void => {
-    let db = getDB();
-    let userHistory = db.story_history.find(h => h.user_id === userId);
+
+// --- History (JSONB columns) ---
+export const getChatHistory = async (userId: number): Promise<ChatMessage[]> => {
+    const { data, error } = await supabase.from('chat_history').select('messages').eq('user_id', userId).single();
+    if (error && error.code !== 'PGRST116') handleError(error, 'getChatHistory');
+    return data?.messages || [];
+};
+export const saveChatHistory = async (userId: number, messages: ChatMessage[]): Promise<void> => {
+    const { error } = await supabase.from('chat_history').upsert({ user_id: userId, messages }, { onConflict: 'user_id' });
+    if (error) handleError(error, 'saveChatHistory');
+};
+
+export const getStoryHistory = async (userId: number): Promise<{ id: number; content: string }[]> => {
+    const { data, error } = await supabase.from('story_history').select('stories').eq('user_id', userId).single();
+    if (error && error.code !== 'PGRST116') handleError(error, 'getStoryHistory');
+    return data?.stories || [];
+};
+export const saveStoryHistory = async (userId: number, storyContent: string): Promise<void> => {
+    const currentHistory = await getStoryHistory(userId);
     const newStory = { id: Date.now(), content: storyContent };
-    if (userHistory) {
-        userHistory.stories.unshift(newStory);
-        if(userHistory.stories.length > 10) userHistory.stories.pop();
-    } else {
-        db.story_history.push({ user_id: userId, stories: [newStory] });
-    }
-    saveDB(db);
+    currentHistory.unshift(newStory);
+    if (currentHistory.length > 10) currentHistory.pop();
+    const { error } = await supabase.from('story_history').upsert({ user_id: userId, stories: currentHistory }, { onConflict: 'user_id' });
+    if (error) handleError(error, 'saveStoryHistory');
 };
 
-export const getImageHistory = (userId: number): { id: number; url: string }[] => {
-    const db = getDB();
-    return db.image_history.find(h => h.user_id === userId)?.images || [];
+export const getImageHistory = async (userId: number): Promise<{ id: number; url: string }[]> => {
+    const { data, error } = await supabase.from('image_history').select('images').eq('user_id', userId).single();
+    if (error && error.code !== 'PGRST116') handleError(error, 'getImageHistory');
+    return data?.images || [];
 };
-export const saveImageHistory = (userId: number, imageUrl: string): void => {
-    let db = getDB();
-    let userHistory = db.image_history.find(h => h.user_id === userId);
+export const saveImageHistory = async (userId: number, imageUrl: string): Promise<void> => {
+    const currentHistory = await getImageHistory(userId);
     const newImage = { id: Date.now(), url: imageUrl };
-    if (userHistory) {
-        userHistory.images.unshift(newImage);
-        if (userHistory.images.length > 10) {
-            userHistory.images.pop(); // Keep only the last 10
-        }
-    } else {
-        db.image_history.push({ user_id: userId, images: [newImage] });
-    }
-    saveDB(db);
+    currentHistory.unshift(newImage);
+    if (currentHistory.length > 10) currentHistory.pop();
+    const { error } = await supabase.from('image_history').upsert({ user_id: userId, images: currentHistory }, { onConflict: 'user_id' });
+    if (error) handleError(error, 'saveImageHistory');
 };
 
 // --- Notifications for Badges ---
-export const getNotificationCounts = (userId: number): { scenarios: number, plans: number, reports: number } => {
-    const scenarios = getScenariosForUser(userId).length;
-    
+export const getNotificationCounts = async (userId: number): Promise<{ scenarios: number, plans: number, reports: number }> => {
+    const { data: scenarios, error: sError } = await supabase.from('scenarios').select('id', { count: 'exact' }).eq('user_id', userId);
+    if (sError) handleError(sError, 'getNotificationCounts:scenarios');
+
+    const plan = await getPlanForUser(userId);
     const lastPlanView = localStorage.getItem(`lastView_plans_${userId}`);
-    const plan = getPlanForUser(userId);
-    const plans = plan && (!lastPlanView || new Date(plan.timestamp).getTime() > Number(lastPlanView)) ? 1 : 0;
-    
-    // For reports, we check if there are any reports newer than the last view time.
+    const plansCount = plan && (!lastPlanView || new Date(plan.timestamp).getTime() > Number(lastPlanView)) ? 1 : 0;
+
+    const reportsList = await getReportsForUser(userId);
     const lastReportView = localStorage.getItem(`lastView_reports_${userId}`);
-    const reportsList = getReportsForUser(userId);
     const newReportsCount = reportsList.filter(report => !lastReportView || new Date(report.timestamp).getTime() > Number(lastReportView)).length;
 
-    return { scenarios, plans, reports: newReportsCount };
+    return { scenarios: scenarios?.length || 0, plans: plansCount, reports: newReportsCount };
 };
 
-export const getAdminNotificationCounts = (): { ideas: number, logs: number } => {
-    const db = getDB();
-    const ideas = db.post_ideas.length;
+export const getAdminNotificationCounts = async (): Promise<{ ideas: number, logs: number }> => {
+    const { data: ideas, error: iError } = await supabase.from('ideas').select('id', { count: 'exact' });
+    if (iError) handleError(iError, 'getAdminNotificationCounts:ideas');
 
     const lastLogView = localStorage.getItem(`lastView_admin_logs`);
-    const lastLogTime = lastLogView ? Number(lastLogView) : 0;
-    const logs = db.activity_logs.filter(log => new Date(log.timestamp).getTime() > lastLogTime).length;
+    const lastLogTime = lastLogView ? new Date(Number(lastLogView)).toISOString() : new Date(0).toISOString();
     
-    return { ideas, logs };
+    const { count: logsCount, error: lError } = await supabase.from('activity_logs').select('*', { count: 'exact', head: true }).gt('created_at', lastLogTime);
+    if (lError) handleError(lError, 'getAdminNotificationCounts:logs');
+
+    return { ideas: ideas?.length || 0, logs: logsCount || 0 };
 };
 
-const dismissNewsItem = (userId: number, type: 'plan' | 'report' | 'scenarios') => {
-    const dismissedKey = `dismissedNews_${userId}`;
-    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
-    let itemToDismissId: string | undefined;
-
-    if (type === 'plan') {
-        const plan = getPlanForUser(userId);
-        if (plan) itemToDismissId = `plan_${plan.id}`;
-    } else if (type === 'report') {
-        const latestReport = getReportsForUser(userId)[0];
-        if (latestReport) itemToDismissId = `report_${latestReport.id}`;
-    } else if (type === 'scenarios') {
-        const scenarios = getScenariosForUser(userId);
-        if(scenarios.length > 0) {
-            const latestScenario = scenarios.sort((a,b) => b.id - a.id)[0];
-            itemToDismissId = `scenarios_${latestScenario.id}`;
-        }
-    }
-
-    if (itemToDismissId && !dismissed.includes(itemToDismissId)) {
-        dismissed.push(itemToDismissId);
-        localStorage.setItem(dismissedKey, JSON.stringify(dismissed));
-    }
-}
-
+const dismissNewsItem = async (userId: number, type: 'plan' | 'report' | 'scenarios') => {
+    // This functionality now relies on clearUserNotifications setting localStorage timestamps.
+    // The dashboard logic will filter based on that, so this function is simplified.
+};
 
 export const clearUserNotifications = (section: 'scenarios' | 'plans' | 'reports', userId: number): void => {
-    if (section === 'scenarios') {
-        dismissNewsItem(userId, 'scenarios');
-    } else {
-        localStorage.setItem(`lastView_${section}_${userId}`, String(Date.now()));
-        // FIX: The dismissNewsItem function expects singular 'plan' or 'report', not plural.
-        if (section === 'plans') {
-            dismissNewsItem(userId, 'plan');
-        } else { // section is 'reports'
-            dismissNewsItem(userId, 'report');
-        }
-    }
+    localStorage.setItem(`lastView_${section}_${userId}`, String(Date.now()));
 };
 
-
 export const clearAdminNotifications = (section: 'ideas' | 'logs'): void => {
-     if(section === 'ideas') {
+     if (section === 'ideas') {
         // Ideas are cleared by being deleted, so we do nothing here.
      } else {
         localStorage.setItem(`lastView_admin_${section}`, String(Date.now()));
      }
 };
+
+// This function needs to be created in your Supabase SQL editor
+/*
+CREATE OR REPLACE FUNCTION increment_usage(p_user_id bigint, p_column text)
+RETURNS void AS $$
+BEGIN
+  EXECUTE format('UPDATE users SET %I = %I + 1 WHERE user_id = %L', p_column, p_column, p_user_id);
+END;
+$$ LANGUAGE plpgsql;
+*/

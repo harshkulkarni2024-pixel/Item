@@ -60,27 +60,31 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
   });
   const [notificationCounts, setNotificationCounts] = useState({scenarios: 0, plans: 0, reports: 0});
 
-  const refreshDashboard = useCallback(() => {
+  const refreshDashboard = useCallback(async () => {
     // This function will re-evaluate all news and notifications.
     const allNews: NewsItem[] = [];
     
     // Broadcast
-    const broadcast = db.getLatestBroadcast();
+    // FIX: Await the promise to resolve before accessing its properties
+    const broadcast = await db.getLatestBroadcast();
     if (broadcast) {
         allNews.push({id: `broadcast_${broadcast.id}`, type: 'اطلاعیه جدید', content: broadcast.message, date: broadcast.timestamp});
     }
 
     // Plan
-    const plan = db.getPlanForUser(user.user_id);
+    // FIX: Await the promise to resolve before accessing its properties
+    const plan = await db.getPlanForUser(user.user_id);
     if (plan) {
         allNews.push({id: `plan_${plan.id}`, type: 'برنامه جدید', content: 'یک برنامه محتوایی جدید برای شما تنظیم شده است.', date: plan.timestamp});
     }
 
     // Report
-    const reports = db.getReportsForUser(user.user_id);
+    // FIX: Await the promise to resolve before using array methods
+    const reports = await db.getReportsForUser(user.user_id);
     if (reports.length > 0) {
         // Create a single news item for all new reports
         const lastReportViewTime = Number(localStorage.getItem(`lastView_reports_${user.user_id}`) || 0);
+        // FIX: The `reports` variable is now a resolved array, so .filter can be used
         const newReports = reports.filter(r => new Date(r.timestamp).getTime() > lastReportViewTime);
         if (newReports.length > 0) {
             allNews.push({id: `report_${newReports[0].id}`, type: 'گزارش جدید', content: `شما ${newReports.length} گزارش عملکرد جدید دارید.`, date: newReports[0].timestamp});
@@ -88,7 +92,8 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
     }
     
     // Scenarios
-    const scenarios: PostScenario[] = db.getScenariosForUser(user.user_id);
+    // FIX: Await the promise to resolve into an array before using it
+    const scenarios: PostScenario[] = await db.getScenariosForUser(user.user_id);
     if (scenarios.length > 0) {
         const latestScenario = scenarios.sort((a,b) => b.id - a.id)[0];
         allNews.push({id: `scenarios_${latestScenario.id}`, type: `سناریوی جدید`, content: `شما ${scenarios.length} سناریوی پست جدید دارید.`, date: new Date(latestScenario.id).toISOString() });
@@ -101,20 +106,28 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
     
     filteredNews.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setNewsItems(filteredNews);
-    setNotificationCounts(db.getNotificationCounts(user.user_id));
+    // FIX: Await the promise to get notification counts
+    const counts = await db.getNotificationCounts(user.user_id);
+    setNotificationCounts(counts);
     onUserUpdate(); // Also refresh the main user object
   }, [user.user_id, onUserUpdate]);
 
   useEffect(() => {
-    const broadcast = db.getLatestBroadcast();
-    if (broadcast) {
-      const dismissedId = sessionStorage.getItem('dismissedBroadcastId');
-      if (String(broadcast.id) !== dismissedId) {
-        setLatestBroadcast(broadcast);
-        setIsBroadcastVisible(true);
-      }
-    }
-    refreshDashboard();
+    // FIX: Wrap async logic in an async function
+    const initialize = async () => {
+        // FIX: Await the promise to get the latest broadcast
+        const broadcast = await db.getLatestBroadcast();
+        if (broadcast) {
+          const dismissedId = sessionStorage.getItem('dismissedBroadcastId');
+          // FIX: The `broadcast` variable is now a resolved object
+          if (String(broadcast.id) !== dismissedId) {
+            setLatestBroadcast(broadcast);
+            setIsBroadcastVisible(true);
+          }
+        }
+        refreshDashboard();
+    };
+    initialize();
   }, [user.user_id, refreshDashboard]);
 
   const dismissBroadcast = () => {

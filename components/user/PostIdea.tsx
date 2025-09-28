@@ -13,9 +13,10 @@ const PostIdea: React.FC<PostIdeaProps> = ({ user, setActiveView }) => {
   const [idea, setIdea] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (idea.trim()) {
-      addIdeaForUser(user.user_id, idea);
+      // FIX: Await the async database operation
+      await addIdeaForUser(user.user_id, idea);
       setIsSubmitted(true);
       setIdea('');
     }

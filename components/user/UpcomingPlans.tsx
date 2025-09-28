@@ -13,7 +13,13 @@ const UpcomingPlans: React.FC<UpcomingPlansProps> = ({ user, onUserUpdate }) => 
   const [plan, setPlan] = useState<Plan | null>(null);
 
   useEffect(() => {
-    setPlan(getPlanForUser(user.user_id));
+    // FIX: Wrap async logic in an async function to be called in useEffect
+    const fetchPlan = async () => {
+        // FIX: Await the async call to get the user's plan
+        const userPlan = await getPlanForUser(user.user_id);
+        setPlan(userPlan);
+    };
+    fetchPlan();
     clearUserNotifications('plans', user.user_id);
     onUserUpdate(); // Let parent know to refresh notification counts
   }, [user.user_id, onUserUpdate]);

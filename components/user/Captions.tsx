@@ -17,8 +17,10 @@ const Captions: React.FC<CaptionsProps> = ({ user }) => {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [newCaption, setNewCaption] = useState<string | null>(null);
 
-  const refreshCaptions = useCallback(() => {
-    setCaptions(db.getCaptionsForUser(user.user_id));
+  const refreshCaptions = useCallback(async () => {
+    // FIX: Await the async call to get captions
+    const userCaptions = await db.getCaptionsForUser(user.user_id);
+    setCaptions(userCaptions);
   }, [user.user_id]);
 
   useEffect(() => {

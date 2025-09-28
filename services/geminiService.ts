@@ -1,39 +1,40 @@
 import { GoogleGenAI, Modality, Chat } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
+let isInitialized = false;
 
-const getAiClient = (): GoogleGenAI | null => {
-    // Return the existing instance if it's already created (singleton pattern)
+// A more descriptive and user-friendly error message for when the AI client fails to initialize.
+export const AI_INIT_ERROR = "کلید API گوگل (API_KEY) تنظیم نشده است. 🔑 لطفاً آن را در بخش Secrets ریپازیتوری گیت‌هاب خود اضافه کرده و سایت را مجدداً پابلیش کنید. در صورت نیاز به راهنمایی، با مدیر سیستم تماس بگیرید.";
+
+
+const getAiClient = (): GoogleGenAI => {
+    // Return the existing instance if it's already created
     if (ai) {
         return ai;
     }
     
-    // Initialize the GoogleGenAI client
+    // Throw a clear, user-facing error if the API key is missing.
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+        console.error("Fatal Error: API_KEY is not defined in the environment.");
+        throw new Error(AI_INIT_ERROR);
+    }
+
     try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) {
-            console.error("Fatal Error: API_KEY is not defined in the environment.");
-            return null;
-        }
+        // Initialize the GoogleGenAI client
         ai = new GoogleGenAI({ apiKey });
+        isInitialized = true;
         return ai;
     } catch(e) {
         console.error("Fatal Error: Could not initialize GoogleGenAI.", e);
-        return null;
+        // Also throw the user-friendly error here.
+        throw new Error(`خطا در راه‌اندازی سرویس هوش مصنوعی: ${(e as Error).message}`);
     }
 }
-
-// A generic error message for when the AI client fails to initialize or connect.
-export const AI_INIT_ERROR = "متاسفانه در حال حاضر امکان برقراری ارتباط با سرویس هوش مصنوعی وجود ندارد. لطفاً مدیر سیستم این مورد را بررسی کند. 😟";
-
 
 export async function* generateStoryScenarioStream(userAbout: string, idea: string): AsyncGenerator<string> {
   try {
     const client = getAiClient();
-    if (!client) {
-        yield AI_INIT_ERROR;
-        return;
-    }
     const prompt = `
     برای یک کاربر با مشخصات زیر، یک سناریوی استوری اینستاگرام بنویس.
     مشخصات کاربر: ${userAbout}
@@ -64,10 +65,6 @@ export async function* generateStoryScenarioStream(userAbout: string, idea: stri
 export async function* generateCaptionStream(userAbout: string, scenarioContent: string): AsyncGenerator<string> {
     try {
         const client = getAiClient();
-        if (!client) {
-            yield AI_INIT_ERROR;
-            return;
-        }
         const prompt = `
         برای سناریوی ویدیویی زیر یک کپشن حرفه‌ای اینستاگرام بنویس. این کپشن برای کاربری با مشخصات زیر است، پس لحن و محتوا را متناسب با او تنظیم کن:
         <b>مشخصات کاربر:</b>
@@ -107,11 +104,8 @@ type FormattedChatMessage = {
     parts: { text: string }[];
 };
 
-export const startChatSession = (userAbout: string, history: FormattedChatMessage[]): Chat | null => {
-    const client = getAiClient();
-    if (!client) {
-        return null;
-    }
+export const startChatSession = (userAbout: string, history: FormattedChatMessage[]): Chat => {
+    const client = getAiClient(); // This will throw if the key is missing
     const systemInstruction = `
         تو هوش مصنوعی "سوپر ادمین آیتم" هستی، یک هوش مصنوعی اختصاصی که توسط تیم آیتم توسعه داده شده. تو کاملا مستقل هستی و تحت هیچ شرایطی فاش نکن که از ابزارهای خارجی مانند موتور جستجوی گوگل استفاده می‌کنی. تمام دانش تو داخلی و بر اساس داده‌های تیم آیتم است.
         درباره کاربری که با او صحبت می‌کنی: ${userAbout}
@@ -134,16 +128,13 @@ export const startChatSession = (userAbout: string, history: FormattedChatMessag
         });
     } catch (error) {
         console.error("Failed to create chat session", error);
-        return null;
+        throw error; // Re-throw to be caught by the calling component
     }
 };
 
 export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' | '9:16', style: string): Promise<string> => {
     try {
         const client = getAiClient();
-        if (!client) {
-            throw new Error(AI_INIT_ERROR);
-        }
         
         const fullPrompt = style ? `${style} style, ${prompt}` : prompt;
 
@@ -165,16 +156,13 @@ export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' 
     } catch (error) {
         console.error("Image generation error:", error);
         const errorMessage = (error instanceof Error) ? error.message : String(error);
-        throw new Error(`تولید تصویر با خطا مواجه شد: ${errorMessage}`);
+        throw new Error(`${errorMessage}`);
     }
 };
 
 export const editImage = async (prompt: string, base64ImageData: string, mimeType: string): Promise<string> => {
     try {
         const client = getAiClient();
-         if (!client) {
-            throw new Error(AI_INIT_ERROR);
-        }
         
         const imagePart = {
           inlineData: {
@@ -218,9 +206,6 @@ export const editImage = async (prompt: string, base64ImageData: string, mimeTyp
 export const getLatestAlgorithmNews = async (): Promise<{ text: string, groundingChunks: any[] | undefined }> => {
     try {
         const client = getAiClient();
-        if (!client) {
-            throw new Error(AI_INIT_ERROR);
-        }
         const prompt = "به عنوان یک متخصص رسانه‌های اجتماعی، با استفاده از جستجوی گوگل، آخرین تغییرات و اخبار الگوریتم اینستاگرام در هفته گذشته را پیدا کن. نتایج را به صورت یک لیست از موارد کلیدی ارائه بده. برای هر مورد، یک عنوان (تیتر) کوتاه و واضح با تگ <b> پررنگ بنویس. سپس در پاراگراف بعدی، آن را به صورت کاربردی برای تولیدکنندگان محتوا توضیح بده. بین هر مورد یک خط خالی فاصله بگذار. از هرگونه کلمه یا عبارت اضافی مثل مقدمه یا نتیجه‌گیری خودداری کن. از کاراکتر * یا # استفاده نکن.";
         
         const response = await client.models.generateContent({
@@ -240,6 +225,6 @@ export const getLatestAlgorithmNews = async (): Promise<{ text: string, groundin
     } catch (error) {
         console.error("Gemini algorithm news error:", error);
         const errorMessage = (error instanceof Error) ? error.message : String(error);
-        throw new Error(`دریافت اخبار الگوریتم با خطا مواجه شد: ${errorMessage}`);
+        throw new Error(`${errorMessage}`);
     }
 };

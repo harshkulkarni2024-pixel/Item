@@ -15,7 +15,13 @@ const ActivityLog: React.FC = () => {
     const [selectedUser, setSelectedUser] = useState<UserActivity | null>(null);
 
     useEffect(() => {
-        setLogs(db.getActivityLogs());
+        // FIX: Wrap async logic in an async function to be called in useEffect
+        const fetchLogs = async () => {
+            // FIX: Await the async call to get activity logs
+            const activityLogs = await db.getActivityLogs();
+            setLogs(activityLogs);
+        };
+        fetchLogs();
         db.clearAdminNotifications('logs');
     }, []);
 

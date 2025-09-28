@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from './types';
-import { verifyAccessCode, isUserAdmin, initializeDB, getUserById } from './services/dbService';
+import { verifyAccessCode, isUserAdmin, getUserById } from './services/dbService';
 import WelcomeScreen from './components/auth/WelcomeScreen';
 import AdminView from './components/admin/AdminView';
 import UserView from './components/user/UserView';
@@ -14,43 +14,47 @@ const App: React.FC = () => {
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    initializeDB();
-    
-    const storedUserId = localStorage.getItem('userId');
-    if (storedUserId) {
-      const userId = parseInt(storedUserId, 10);
-      if (!isNaN(userId)) {
-        const user = verifyAccessCode(String(userId), true);
-        if (user) {
-          setCurrentUser(user);
-          setIsAdmin(isUserAdmin(user.user_id));
+    const checkSession = async () => {
+      const storedUserId = localStorage.getItem('userId');
+      if (storedUserId) {
+        const userId = parseInt(storedUserId, 10);
+        if (!isNaN(userId)) {
+          const user = await verifyAccessCode(String(userId), true);
+          if (user) {
+            setCurrentUser(user);
+            setIsAdmin(isUserAdmin(user.user_id));
+          } else {
+            localStorage.removeItem('userId');
+          }
         } else {
-          // If the stored user ID is invalid (e.g., user deleted), clear it.
           localStorage.removeItem('userId');
         }
-      } else {
-        // If the stored ID isn't even a number, clear it.
-        localStorage.removeItem('userId');
       }
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+    checkSession();
   }, []);
 
-  const handleLogin = useCallback((code: string): boolean => {
+  const handleLogin = useCallback(async (code: string): Promise<boolean> => {
     setError('');
     setIsLoading(true);
-    const user = verifyAccessCode(code);
-    if (user) {
-      setCurrentUser(user);
-      const adminStatus = isUserAdmin(user.user_id);
-      setIsAdmin(adminStatus);
-      localStorage.setItem('userId', String(user.user_id));
-      setIsLoading(false);
-      return true;
-    } else {
-      setError('کد دسترسی یا رمز عبور نامعتبر است. لطفاً دوباره تلاش کنید.');
-      setIsLoading(false);
-      return false;
+    try {
+      const user = await verifyAccessCode(code);
+      if (user) {
+        setCurrentUser(user);
+        const adminStatus = isUserAdmin(user.user_id);
+        setIsAdmin(adminStatus);
+        localStorage.setItem('userId', String(user.user_id));
+        return true;
+      } else {
+        setError('کد دسترسی یا رمز عبور نامعتبر است. لطفاً دوباره تلاش کنید.');
+        return false;
+      }
+    } catch (err) {
+        setError('خطا در ارتباط با سرور. لطفاً اتصال اینترنت خود را بررسی کنید.');
+        return false;
+    } finally {
+        setIsLoading(false);
     }
   }, []);
 
@@ -60,13 +64,11 @@ const App: React.FC = () => {
     localStorage.removeItem('userId');
   }, []);
   
-  const handleUserUpdate = useCallback(() => {
-    setCurrentUser(prevUser => {
-        if (!prevUser) return null;
-        const updatedUser = getUserById(prevUser.user_id);
-        return updatedUser || prevUser; // Keep old user data if update fails
-    });
-  }, []);
+  const handleUserUpdate = useCallback(async () => {
+    if (!currentUser) return;
+    const updatedUser = await getUserById(currentUser.user_id);
+    setCurrentUser(updatedUser);
+  }, [currentUser]);
 
 
   if (isLoading) {

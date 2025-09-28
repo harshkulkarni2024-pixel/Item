@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Loader } from '../common/Loader';
 
 interface WelcomeScreenProps {
-  onLogin: (code: string) => boolean;
+  onLogin: (code: string) => Promise<boolean>;
   error: string;
   setError: (error: string) => void;
 }
@@ -12,13 +12,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLogin, error, setError 
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue) return;
     setIsLoading(true);
     setError('');
 
-    const success = onLogin(inputValue);
+    const success = await onLogin(inputValue);
     
     if (!success) {
        setInputValue('');

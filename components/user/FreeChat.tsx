@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, ChatMessage } from '../../types';
-import { startChatSession, AI_INIT_ERROR } from '../../services/geminiService';
+import { startChatSession } from '../../services/geminiService';
 import { incrementUsage, getChatHistory, saveChatHistory } from '../../services/dbService';
 import { Icon } from '../common/Icon';
 import { VoiceInput } from '../common/VoiceInput';
@@ -16,25 +16,31 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [chat, setChat] = useState<Chat | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
-        const history = getChatHistory(user.user_id);
-        const formattedHistory = history.map(msg => ({
-            role: msg.sender === 'user' ? 'user' : 'model' as 'user' | 'model',
-            parts: [{ text: msg.text }]
-        }));
-        
-        const session = startChatSession(user.about_info || '', formattedHistory);
+        const initializeChat = async () => {
+            try {
+                const history = await getChatHistory(user.user_id);
+                const formattedHistory = history.map(msg => ({
+                    role: msg.sender === 'user' ? 'user' : 'model' as 'user' | 'model',
+                    parts: [{ text: msg.text }]
+                }));
+                
+                const session = startChatSession(user.about_info || '', formattedHistory);
+                setChat(session);
+                setMessages(history);
 
-        if (session) {
-            setChat(session);
-        } else {
-            // If session fails, show an initial error message in chat
-             setMessages([{ sender: 'ai', text: AI_INIT_ERROR }]);
-        }
-        setMessages(history);
+            } catch(e) {
+                const errorMessage = (e as Error).message;
+                console.error("Chat Initialization Error:", errorMessage);
+                setError(errorMessage);
+                setMessages([{ sender: 'ai', text: errorMessage }]);
+            }
+        };
+        initializeChat();
     }, [user.about_info, user.user_id]);
 
     useEffect(() => {
@@ -82,19 +88,19 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
                     return updatedMessages;
                 });
             }
-            incrementUsage(user.user_id, 'chat');
+            await incrementUsage(user.user_id, 'chat');
             onUserUpdate();
-            saveChatHistory(user.user_id, [...currentMessages, { sender: 'ai', text: fullAiResponse }]);
+            await saveChatHistory(user.user_id, [...currentMessages, { sender: 'ai', text: fullAiResponse }]);
 
         } catch (error) {
-             const errorMessage = 'متاسفم، مشکلی پیش آمد.';
+             const errorMessage = 'متاسفم، مشکلی در ارتباط با هوش مصنوعی پیش آمد. لطفاً دوباره تلاش کنید.';
              setMessages(prev => {
                 const lastIndex = prev.length - 1;
                 const updatedMessages = [...prev];
                 updatedMessages[lastIndex] = { ...updatedMessages[lastIndex], text: errorMessage };
                 return updatedMessages;
             });
-            saveChatHistory(user.user_id, [...currentMessages, { sender: 'ai', text: errorMessage }]);
+            await saveChatHistory(user.user_id, [...currentMessages, { sender: 'ai', text: errorMessage }]);
         } finally {
             setIsLoading(false);
         }
@@ -103,12 +109,12 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
     const remainingMessages = 10 - user.chat_messages;
 
     const renderChatContent = () => {
-        if (!chat && messages.length === 0) {
+        if (error && messages.length <= 1) {
              return (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center">
                     <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center mb-4"><Icon name="lock-closed" className="w-6 h-6 text-slate-500" /></div>
-                    <p className="font-semibold text-white">خطای اتصال</p>
-                    <p className="text-sm">{AI_INIT_ERROR}</p>
+                    <p className="font-semibold text-white">خطای اتصال به هوش مصنوعی</p>
+                    <p className="text-sm whitespace-pre-wrap">{error}</p>
                 </div>
             );
         }

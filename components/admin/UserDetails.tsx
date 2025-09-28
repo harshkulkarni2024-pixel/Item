@@ -24,11 +24,20 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
     const [ideas, setIdeas] = useState<PostIdea[]>([]);
     const [newScenario, setNewScenario] = useState({ number: '', content: '' });
 
-    const refreshData = useCallback(() => {
-        setPlan(db.getPlanForUser(user.user_id)?.content || '');
-        setReport(db.getReportsForUser(user.user_id).map(r => `تاریخ: ${new Date(r.timestamp).toLocaleDateString('fa-IR')}\n${r.content}`).join('\n\n---\n\n') || '');
-        setScenarios(db.getScenariosForUser(user.user_id));
-        setIdeas(db.getIdeasForUser(user.user_id));
+    const refreshData = useCallback(async () => {
+        // FIX: Await async calls to get data before setting state
+        const userPlan = await db.getPlanForUser(user.user_id);
+        setPlan(userPlan?.content || '');
+
+        const userReports = await db.getReportsForUser(user.user_id);
+        // FIX: `userReports` is now a resolved array, so .map can be used
+        setReport(userReports.map(r => `تاریخ: ${new Date(r.timestamp).toLocaleDateString('fa-IR')}\n${r.content}`).join('\n\n---\n\n') || '');
+
+        const userScenarios = await db.getScenariosForUser(user.user_id);
+        setScenarios(userScenarios);
+
+        const userIdeas = await db.getIdeasForUser(user.user_id);
+        setIdeas(userIdeas);
         onUpdate();
     }, [user.user_id, onUpdate]);
 
@@ -43,26 +52,29 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
         }
     }, [activeTab, onUpdate]);
 
-    const handleSave = () => {
-        if (activeTab === 'about') db.updateUserAbout(user.user_id, about);
-        if (activeTab === 'plans') db.savePlanForUser(user.user_id, plan);
-        if (activeTab === 'reports') db.saveReportForUser(user.user_id, report);
+    const handleSave = async () => {
+        // FIX: Await async database operations
+        if (activeTab === 'about') await db.updateUserAbout(user.user_id, about);
+        if (activeTab === 'plans') await db.savePlanForUser(user.user_id, plan);
+        if (activeTab === 'reports') await db.saveReportForUser(user.user_id, report);
         setIsEditing(false);
         refreshData();
     };
 
-    const handleDelete = (type: 'plan' | 'report', id: number) => {
+    const handleDelete = async (type: 'plan' | 'report', id: number) => {
         const typeInFarsi = type === 'plan' ? 'برنامه' : 'گزارش';
         if (window.confirm(`آیا از حذف تمام ${typeInFarsi}‌های این کاربر مطمئن هستید؟`)) {
-            if (type === 'plan') db.deletePlanForUser(id);
-            if (type === 'report') db.deleteReportForUser(id);
+            // FIX: Await async database operations
+            if (type === 'plan') await db.deletePlanForUser(id);
+            if (type === 'report') await db.deleteReportForUser(id);
         }
         refreshData();
     }
     
-    const handleAddScenario = () => {
+    const handleAddScenario = async () => {
         if (newScenario.number && newScenario.content) {
-            db.addScenarioForUser(user.user_id, parseInt(newScenario.number), newScenario.content);
+            // FIX: Await async database operation
+            await db.addScenarioForUser(user.user_id, parseInt(newScenario.number), newScenario.content);
             setNewScenario({ number: '', content: '' });
             refreshData();
         }
@@ -79,22 +91,25 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
                         captionContent += chunk;
                     }
                     const captionTitle = `کپشن سناریو شماره ${scenarioToDelete.scenario_number}`;
-                    db.addCaption(user.user_id, captionTitle, captionContent, scenarioToDelete.content);
+                    // FIX: Await async database operation
+                    await db.addCaption(user.user_id, captionTitle, captionContent, scenarioToDelete.content);
                 } catch (error) {
                     console.error("Caption generation failed during admin delete:", error);
                     alert("تولید کپشن خودکار با خطا مواجه شد، اما سناریو حذف می‌شود.");
                 } finally {
-                    db.deleteScenario(id);
-                    db.logActivity(user.user_id, `سناریوی شماره ${scenarioToDelete.scenario_number} توسط مدیر حذف شد.`);
+                    // FIX: Await async database operations
+                    await db.deleteScenario(id);
+                    await db.logActivity(user.user_id, `سناریوی شماره ${scenarioToDelete.scenario_number} توسط مدیر حذف شد.`);
                     refreshData();
                 }
             }
         }
     }
     
-    const handleDeleteIdea = (id: number) => {
+    const handleDeleteIdea = async (id: number) => {
         if (window.confirm('این ایده حذف شود؟')) {
-            db.deleteIdea(id);
+            // FIX: Await async database operation
+            await db.deleteIdea(id);
             refreshData();
         }
     }

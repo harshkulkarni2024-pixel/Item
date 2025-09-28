@@ -23,8 +23,10 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [notifications, setNotifications] = useState({ ideas: 0, logs: 0 });
 
-  const refreshNotifications = useCallback(() => {
-    setNotifications(db.getAdminNotificationCounts());
+  const refreshNotifications = useCallback(async () => {
+    // FIX: Await the async call to get notification counts
+    const counts = await db.getAdminNotificationCounts();
+    setNotifications(counts);
   }, []);
 
   useEffect(() => {
@@ -47,10 +49,13 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
 
 
   useEffect(() => {
-    const handlePopState = (event: PopStateEvent) => {
+    // FIX: Event handlers that perform async operations should be async
+    const handlePopState = async (event: PopStateEvent) => {
         const state = event.state;
         if (state?.adminView === 'userDetails' && state.userId) {
-            const userToSelect = db.getAllUsers().find(u => u.user_id === state.userId);
+            // FIX: Await the promise to get the list of users before using .find()
+            const allUsers = await db.getAllUsers();
+            const userToSelect = allUsers.find(u => u.user_id === state.userId);
             if (userToSelect) {
                 setSelectedUser(userToSelect);
                 setActiveView('users');
@@ -70,24 +75,31 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
 
     window.addEventListener('popstate', handlePopState);
 
-    const hash = window.location.hash.replace('#', '');
-    if (hash.startsWith('users/')) {
-        const userId = parseInt(hash.split('/')[1], 10);
-        const userToSelect = userId ? db.getAllUsers().find(u => u.user_id === userId) : null;
-        if (userToSelect) {
-            setSelectedUser(userToSelect);
+    // FIX: Wrap async logic in an async function to be called in the effect
+    const initializeView = async () => {
+        const hash = window.location.hash.replace('#', '');
+        if (hash.startsWith('users/')) {
+            const userId = parseInt(hash.split('/')[1], 10);
+            // FIX: Await the promise to get the list of users before using .find()
+            const allUsers = await db.getAllUsers();
+            const userToSelect = userId ? allUsers.find(u => u.user_id === userId) : null;
+            if (userToSelect) {
+                setSelectedUser(userToSelect);
+                setActiveView('users');
+                history.replaceState({ adminView: 'userDetails', userId }, '', `#users/${userId}`);
+            }
+        } else if (hash === 'broadcast' || hash === 'activity' || hash === 'telegram') {
+            setActiveView(hash as AdminViewType);
+            setSelectedUser(null);
+            history.replaceState({ adminView: hash }, '', `#${hash}`);
+        } else {
             setActiveView('users');
-            history.replaceState({ adminView: 'userDetails', userId }, '', `#users/${userId}`);
+            setSelectedUser(null);
+            history.replaceState({ adminView: 'users' }, '', '#users');
         }
-    } else if (hash === 'broadcast' || hash === 'activity' || hash === 'telegram') {
-        setActiveView(hash as AdminViewType);
-        setSelectedUser(null);
-        history.replaceState({ adminView: hash }, '', `#${hash}`);
-    } else {
-        setActiveView('users');
-        setSelectedUser(null);
-        history.replaceState({ adminView: 'users' }, '', '#users');
-    }
+    };
+    
+    initializeView();
     
     return () => {
         window.removeEventListener('popstate', handlePopState);

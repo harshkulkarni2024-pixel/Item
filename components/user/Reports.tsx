@@ -12,7 +12,13 @@ const Reports: React.FC<ReportsProps> = ({ user, onUserUpdate }) => {
   const [reports, setReports] = useState<Report[]>([]);
 
   useEffect(() => {
-    setReports(getReportsForUser(user.user_id));
+    // FIX: Wrap async logic in an async function to be called in useEffect
+    const fetchReports = async () => {
+        // FIX: Await the async call to get the user's reports
+        const userReports = await getReportsForUser(user.user_id);
+        setReports(userReports);
+    };
+    fetchReports();
     clearUserNotifications('reports', user.user_id);
     onUserUpdate(); // Let parent know to refresh notification counts
   }, [user.user_id, onUserUpdate]);
