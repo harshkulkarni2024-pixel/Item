@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '../../types';
 import { Icon } from '../common/Icon';
@@ -149,7 +148,7 @@ const UserView: React.FC<UserViewProps> = ({ user, onLogout, onUserUpdate }) => 
               </button>
           </div>
           <div className="flex-1 text-center">
-              <h1 className="text-lg font-bold text-white">هوش مصنوعی آیتـــم</h1>
+              <h1 className="text-lg font-bold text-white">سوپر ادمین آیتـــم</h1>
           </div>
       </header>
 

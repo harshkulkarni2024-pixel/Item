@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { User } from '../../types';
 import { Icon } from '../common/Icon';
@@ -6,6 +5,7 @@ import UserManagement from './UserManagement';
 import Broadcast from './Broadcast';
 import UserDetails from './UserDetails';
 import ActivityLog from './ActivityLog';
+import TelegramIntegration from './TelegramIntegration'; // Import the new component
 import * as db from '../../services/dbService';
 
 interface AdminViewProps {
@@ -13,7 +13,7 @@ interface AdminViewProps {
   onLogout: () => void;
 }
 
-type AdminViewType = 'users' | 'broadcast' | 'activity';
+type AdminViewType = 'users' | 'broadcast' | 'activity' | 'telegram'; // Add 'telegram'
 
 const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
   const [activeView, setActiveView] = useState<AdminViewType>('users');
@@ -79,8 +79,8 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
             setActiveView('users');
             history.replaceState({ adminView: 'userDetails', userId }, '', `#users/${userId}`);
         }
-    } else if (hash === 'broadcast' || hash === 'activity') {
-        setActiveView(hash);
+    } else if (hash === 'broadcast' || hash === 'activity' || hash === 'telegram') {
+        setActiveView(hash as AdminViewType);
         setSelectedUser(null);
         history.replaceState({ adminView: hash }, '', `#${hash}`);
     } else {
@@ -147,6 +147,8 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
         return <Broadcast />;
       case 'activity':
         return <ActivityLog />;
+      case 'telegram':
+        return <TelegramIntegration />;
       default:
         return <UserManagement onSelectUser={handleSelectUser} onLogout={onLogout} />;
     }
@@ -162,7 +164,7 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
               </button>
           </div>
           <div className="flex-1 text-center">
-              <h1 className="text-lg font-bold text-white">پنل مدیریت آیتـــم</h1>
+              <h1 className="text-lg font-bold text-white">پنل مدیریت سوپر ادمین آیتـــم</h1>
           </div>
       </header>
 
@@ -174,6 +176,7 @@ const AdminView: React.FC<AdminViewProps> = ({ user, onLogout }) => {
                   <NavItem view="users" icon="users" label="کاربران" count={notifications.ideas}/>
                   <NavItem view="broadcast" icon="broadcast" label="ارسال اطلاعیه" count={0} />
                   <NavItem view="activity" icon="document-text" label="آخرین فعالیت‌ها" count={notifications.logs} />
+                  <NavItem view="telegram" icon="send" label="ربات تلگرام" count={0} />
               </ul>
             </nav>
           </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { generateImage, editImage } from '../../services/geminiService';
@@ -12,6 +11,23 @@ interface ImageGeneratorProps {
     onUserUpdate: () => void;
 }
 
+const STYLES = [
+    { value: '', label: 'بدون سبک' },
+    { value: 'Photorealistic', label: 'واقع‌گرایانه' },
+    { value: 'Cinematic', label: 'سینمایی' },
+    { value: 'Cartoon', label: 'کارتونی' },
+    { value: 'Fantasy art', label: 'هنر فانتزی' },
+    { value: '3D model', label: 'مدل سه‌بعدی' },
+    { value: 'Watercolor', label: 'آبرنگ' },
+];
+
+const ASPECT_RATIOS = [
+    { value: '1:1', label: 'مربع' },
+    { value: '9:16', label: 'عمودی (استوری)' },
+    { value: '16:9', label: 'افقی (پست)' },
+] as const;
+
+
 const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) => {
     const [prompt, setPrompt] = useState('');
     const [currentImageUrl, setCurrentImageUrl] = useState('');
@@ -19,6 +35,9 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [uploadedImage, setUploadedImage] = useState<{data: string, mime: string} | null>(null);
+    const [aspectRatio, setAspectRatio] = useState<'1:1' | '16:9' | '9:16'>('1:1');
+    const [style, setStyle] = useState('');
+
 
      useEffect(() => {
         setHistory(getImageHistory(user.user_id));
@@ -73,7 +92,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
             if (uploadedImage) {
                 result = await editImage(prompt, uploadedImage.data, uploadedImage.mime);
             } else {
-                result = await generateImage(prompt);
+                result = await generateImage(prompt, aspectRatio, style);
             }
             setCurrentImageUrl(result);
             saveImageHistory(user.user_id, result);
@@ -126,13 +145,34 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
                             </div>
                         </div>
                     </div>
+
+                     {!uploadedImage && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">ابعاد عکس</label>
+                                <div className="flex gap-2">
+                                    {ASPECT_RATIOS.map(ratio => (
+                                        <button key={ratio.value} onClick={() => setAspectRatio(ratio.value)} className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${aspectRatio === ratio.value ? 'bg-violet-600 text-white' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                                            {ratio.label}
+                                        </button>
+                                    ))}
+                                </div>
+                             </div>
+                              <div>
+                                <label htmlFor="style-select" className="block text-sm font-medium text-slate-300 mb-2">سبک عکس</label>
+                                <select id="style-select" value={style} onChange={e => setStyle(e.target.value)} className="w-full bg-slate-700 border border-slate-600 text-white p-2.5 rounded-lg focus:ring-violet-500 focus:border-violet-500">
+                                     {STYLES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    )}
                     
                     <div className="relative">
                         <textarea
                             value={prompt}
                             onChange={(e) => setPrompt(e.target.value)}
                             placeholder={uploadedImage ? 'مثلا: یک کلاه تولد روی سرش بگذار' : 'مثلاً: یک فضانورد که در مریخ سوار بر اسب است'}
-                            className="w-full h-24 p-4 pe-20 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
+                            className="w-full h-24 p-4 ps-20 pe-4 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
                             disabled={isLoading}
                         />
                         <VoiceInput onTranscript={setPrompt} disabled={isLoading} />
@@ -152,7 +192,7 @@ const ImageGenerator: React.FC<ImageGeneratorProps> = ({ user, onUserUpdate }) =
             {isLoading && !currentImageUrl && (
                  <div className="mt-8 text-center text-slate-400">
                     <Loader />
-                    <p>هوش مصنوعی آیتــــم در حال تولید عکس شما</p>
+                    <p>هوش مصنوعی سوپر ادمین آیتــــم در حال تولید عکس شما</p>
                  </div>
             )}
 

@@ -40,7 +40,7 @@ const Broadcast: React.FC = () => {
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
                         placeholder="پیام شما اینجا..."
-                        className="w-full h-40 p-4 pe-20 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
+                        className="w-full h-40 p-4 ps-20 pe-4 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
                         disabled={isSending}
                     />
                     <VoiceInput onTranscript={setMessage} disabled={isSending} />

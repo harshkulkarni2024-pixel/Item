@@ -1,8 +1,7 @@
-
 import React, { useState, useCallback, useEffect } from 'react';
 import { User, Caption } from '../../types';
 import * as db from '../../services/dbService';
-import { generateCaptionStream } from '../../services/geminiService';
+import { generateCaptionStream, AI_INIT_ERROR } from '../../services/geminiService';
 import { Loader } from '../common/Loader';
 import { Icon } from '../common/Icon';
 
@@ -37,12 +36,20 @@ const Captions: React.FC<CaptionsProps> = ({ user }) => {
       setNewCaption('');
       try {
           const stream = generateCaptionStream(user.about_info || '', selectedCaption.original_scenario_content);
+          let fullResponse = '';
           for await (const chunk of stream) {
+            if (chunk.includes(AI_INIT_ERROR)) throw new Error(AI_INIT_ERROR);
+            fullResponse += chunk;
             setNewCaption(prev => (prev || '') + chunk);
           }
+          if (!fullResponse.trim()) {
+              throw new Error("پاسخ خالی از هوش مصنوعی دریافت شد. لطفاً دوباره تلاش کنید.");
+          }
+
       } catch (error) {
           console.error("Failed to regenerate caption", error);
-          setNewCaption("متاسفانه، در تولید کپشن جدید خطایی رخ داد.");
+          const errorMessage = (error as Error).message;
+          setNewCaption(`متاسفانه، در تولید کپشن جدید خطایی رخ داد: ${errorMessage}`);
       } finally {
           setIsRegenerating(false);
       }

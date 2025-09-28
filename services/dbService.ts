@@ -1,4 +1,3 @@
-
 import { User, PostScenario, Plan, Report, Caption, PostIdea, BroadcastMessage, ActivityLog, UserChatHistory, UserStoryHistory, UserImageHistory, ChatMessage } from '../types';
 
 interface DB {
@@ -337,25 +336,23 @@ export const deletePlanForUser = (userId: number): void => {
 }
 
 // --- Reports ---
-export const getReportForUser = (userId: number): Report | null => getDB().reports.find(r => r.user_id === userId) || null;
+export const getReportsForUser = (userId: number): Report[] => {
+    return getDB().reports.filter(r => r.user_id === userId)
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+};
 
 export const saveReportForUser = (userId: number, content: string): void => {
     let db = getDB();
-    let report = db.reports.find(r => r.user_id === userId);
-    if (report) {
-        report.content = content;
-        report.timestamp = new Date().toISOString();
-    } else {
-        db.reports.push({ id: Date.now(), user_id: userId, content, timestamp: new Date().toISOString() });
-    }
+    // Always add a new report, don't update existing.
+    db.reports.push({ id: Date.now(), user_id: userId, content, timestamp: new Date().toISOString() });
     saveDB(db);
-}
+};
 
 export const deleteReportForUser = (userId: number): void => {
     let db = getDB();
     db.reports = db.reports.filter(r => r.user_id !== userId);
     saveDB(db);
-}
+};
 
 // --- Scenarios ---
 export const getScenariosForUser = (userId: number): PostScenario[] => getDB().post_scenarios.filter(p => p.user_id === userId).sort((a, b) => a.scenario_number - b.scenario_number);
@@ -471,11 +468,12 @@ export const getNotificationCounts = (userId: number): { scenarios: number, plan
     const plan = getPlanForUser(userId);
     const plans = plan && (!lastPlanView || new Date(plan.timestamp).getTime() > Number(lastPlanView)) ? 1 : 0;
     
+    // For reports, we check if there are any reports newer than the last view time.
     const lastReportView = localStorage.getItem(`lastView_reports_${userId}`);
-    const report = getReportForUser(userId);
-    const reports = report && (!lastReportView || new Date(report.timestamp).getTime() > Number(lastReportView)) ? 1 : 0;
-    
-    return { scenarios, plans, reports };
+    const reportsList = getReportsForUser(userId);
+    const newReportsCount = reportsList.filter(report => !lastReportView || new Date(report.timestamp).getTime() > Number(lastReportView)).length;
+
+    return { scenarios, plans, reports: newReportsCount };
 };
 
 export const getAdminNotificationCounts = (): { ideas: number, logs: number } => {
@@ -489,14 +487,46 @@ export const getAdminNotificationCounts = (): { ideas: number, logs: number } =>
     return { ideas, logs };
 };
 
+const dismissNewsItem = (userId: number, type: 'plan' | 'report' | 'scenarios') => {
+    const dismissedKey = `dismissedNews_${userId}`;
+    const dismissed = JSON.parse(localStorage.getItem(dismissedKey) || '[]');
+    let itemToDismissId: string | undefined;
+
+    if (type === 'plan') {
+        const plan = getPlanForUser(userId);
+        if (plan) itemToDismissId = `plan_${plan.id}`;
+    } else if (type === 'report') {
+        const latestReport = getReportsForUser(userId)[0];
+        if (latestReport) itemToDismissId = `report_${latestReport.id}`;
+    } else if (type === 'scenarios') {
+        const scenarios = getScenariosForUser(userId);
+        if(scenarios.length > 0) {
+            const latestScenario = scenarios.sort((a,b) => b.id - a.id)[0];
+            itemToDismissId = `scenarios_${latestScenario.id}`;
+        }
+    }
+
+    if (itemToDismissId && !dismissed.includes(itemToDismissId)) {
+        dismissed.push(itemToDismissId);
+        localStorage.setItem(dismissedKey, JSON.stringify(dismissed));
+    }
+}
+
+
 export const clearUserNotifications = (section: 'scenarios' | 'plans' | 'reports', userId: number): void => {
     if (section === 'scenarios') {
-        // Scenarios are cleared by being processed, not by viewing the list.
-        // So we do nothing here. The count is the number of existing scenarios.
+        dismissNewsItem(userId, 'scenarios');
     } else {
         localStorage.setItem(`lastView_${section}_${userId}`, String(Date.now()));
+        // FIX: The dismissNewsItem function expects singular 'plan' or 'report', not plural.
+        if (section === 'plans') {
+            dismissNewsItem(userId, 'plan');
+        } else { // section is 'reports'
+            dismissNewsItem(userId, 'report');
+        }
     }
 };
+
 
 export const clearAdminNotifications = (section: 'ideas' | 'logs'): void => {
      if(section === 'ideas') {

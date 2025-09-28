@@ -39,7 +39,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLogin, error, setError 
       <div className="relative w-full max-w-xs p-8 space-y-4 bg-slate-800 rounded-2xl shadow-2xl border border-slate-700">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white tracking-tight">
-            هوش مصنوعی آیتم
+            سوپر ادمین آیتم
           </h1>
           
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>

@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
 import * as db from '../../services/dbService';
-import { generateCaptionStream } from '../../services/geminiService';
+import { generateCaptionStream, AI_INIT_ERROR } from '../../services/geminiService';
 import { Loader } from '../common/Loader';
 import { Icon } from '../common/Icon';
 import { UserViewType } from './UserView';
@@ -18,6 +17,7 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
     const [selectedScenario, setSelectedScenario] = useState<ReturnType<typeof db.getScenarioById>>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState('');
+    const [error, setError] = useState('');
 
     const refreshScenarios = useCallback(() => {
         setScenarios(db.getScenariosForUser(user.user_id));
@@ -25,13 +25,13 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
     }, [user.user_id, onUserUpdate]);
 
     useEffect(() => {
-        // This view functions as the notification "inbox". Viewing it clears the badge.
-        // We handle this by simply re-evaluating counts in the parent.
+        db.clearUserNotifications('scenarios', user.user_id);
         onUserUpdate();
-    }, [onUserUpdate]);
+    }, [onUserUpdate, user.user_id]);
 
     const handleRecord = async (scenarioId: number) => {
         setIsLoading(true);
+        setError('');
         setNotification('عالی! در حال تولید کپشن برای شما...');
         const scenarioToProcess = db.getScenarioById(scenarioId);
         if (scenarioToProcess) {
@@ -39,22 +39,36 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
                 let captionContent = '';
                 const stream = generateCaptionStream(user.about_info || '', scenarioToProcess.content);
                 for await (const chunk of stream) {
+                    if (chunk.includes(AI_INIT_ERROR)) {
+                        throw new Error(AI_INIT_ERROR);
+                    }
                     captionContent += chunk;
                 }
-                const captionTitle = `کپشن سناریو شماره ${scenarioToProcess.scenario_number}`;
-                db.addCaption(user.user_id, captionTitle, captionContent, scenarioToProcess.content);
-                db.deleteScenario(scenarioId);
-                db.logActivity(user.user_id, `سناریو شماره ${scenarioToProcess.scenario_number} را تایید کرد.`);
-                setNotification(`آفرین! کپشن برای سناریو شماره ${scenarioToProcess.scenario_number} تولید شد. می‌تونی تو بخش «کپشن‌ها» پیداش کنی.`);
-            } catch (error) {
-                console.error(error);
-                setNotification('خطا در تولید کپشن، اما سناریو به عنوان انجام شده علامت‌گذاری شد.');
-                db.deleteScenario(scenarioId);
+                
+                if (captionContent.trim()) {
+                    const captionTitle = `کپشن سناریو شماره ${scenarioToProcess.scenario_number}`;
+                    db.addCaption(user.user_id, captionTitle, captionContent, scenarioToProcess.content);
+                    db.logActivity(user.user_id, `سناریو شماره ${scenarioToProcess.scenario_number} را تایید کرد.`);
+                    setNotification(`آفرین! کپشن برای سناریو شماره ${scenarioToProcess.scenario_number} تولید شد. می‌تونی تو بخش «کپشن‌ها» پیداش کنی.`);
+                } else {
+                     throw new Error("پاسخ خالی از هوش مصنوعی دریافت شد.");
+                }
+
+            } catch (err) {
+                const errorMessage = (err as Error).message;
+                console.error("Caption Generation Error:", errorMessage);
+                setError(`خطا در تولید کپشن: ${errorMessage}`);
+                setNotification('');
             } finally {
+                // The scenario is deleted regardless of caption success, as the user has "recorded" it.
+                db.deleteScenario(scenarioId);
                 refreshScenarios();
                 setSelectedScenario(null);
                 setIsLoading(false);
-                setTimeout(() => setNotification(''), 5000);
+                setTimeout(() => {
+                    setNotification('');
+                    setError('');
+                }, 5000);
             }
         }
     };
@@ -91,6 +105,12 @@ const PostScenarios: React.FC<PostScenariosProps> = ({ user, setActiveView, onUs
                     {notification}
                 </div>
             )}
+             {error && (
+                <div className="bg-red-900/50 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-6 text-center">
+                    {error}
+                </div>
+            )}
+
 
             {scenarios.length === 0 ? (
                 <div className="text-center bg-slate-800 p-8 rounded-lg">

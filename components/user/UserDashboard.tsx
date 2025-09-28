@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, BroadcastMessage, PostScenario } from '../../types';
 import { Icon } from '../common/Icon';
@@ -78,9 +77,14 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
     }
 
     // Report
-    const report = db.getReportForUser(user.user_id);
-    if (report) {
-        allNews.push({id: `report_${report.id}`, type: 'گزارش جدید', content: 'گزارش عملکرد جدیدی برای شما ثبت شده است.', date: report.timestamp});
+    const reports = db.getReportsForUser(user.user_id);
+    if (reports.length > 0) {
+        // Create a single news item for all new reports
+        const lastReportViewTime = Number(localStorage.getItem(`lastView_reports_${user.user_id}`) || 0);
+        const newReports = reports.filter(r => new Date(r.timestamp).getTime() > lastReportViewTime);
+        if (newReports.length > 0) {
+            allNews.push({id: `report_${newReports[0].id}`, type: 'گزارش جدید', content: `شما ${newReports.length} گزارش عملکرد جدید دارید.`, date: newReports[0].timestamp});
+        }
     }
     
     // Scenarios
@@ -150,7 +154,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
       )}
       
       <h1 className="text-3xl font-bold text-white mb-2">
-         {user.full_name} <span className="text-slate-400 text-xl font-normal">با آیتم تو یک لیگ دیگست :)</span>
+         {user.full_name} <span className="text-slate-400 text-xl font-normal">با سوپر ادمین آیتم تو یک لیگ دیگست :)</span>
       </h1>
       <p className="text-sm text-slate-400 mb-8">
         برای شروع، یکی از ابزارهای زیر را انتخاب کن.
@@ -165,7 +169,7 @@ const UserDashboard: React.FC<UserDashboardProps> = ({ user, setActiveView, onUs
                 <Icon name="chat" className="w-8 h-8 text-violet-400 group-hover:text-white transition-colors" />
             </div>
             <div>
-                <h3 className="text-lg font-bold text-white text-right">گفتگو با هوش مصنوعی آیتـــم</h3>
+                <h3 className="text-lg font-bold text-white text-right">گفتگو با هوش مصنوعی سوپر ادمین آیتـــم</h3>
                 <p className="text-sm text-slate-400 text-right">هرچیزی که در مورد استراتژی محتوا میخوای بدونی بپرس!</p>
             </div>
         </button>

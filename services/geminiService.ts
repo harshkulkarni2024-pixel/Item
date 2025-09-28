@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality, Chat } from "@google/genai";
 
 let ai: GoogleGenAI | null = null;
@@ -11,8 +10,6 @@ const getAiClient = (): GoogleGenAI | null => {
     
     // Initialize the GoogleGenAI client
     try {
-        // Fix for line 16: Use process.env.API_KEY as per guidelines.
-        // This resolves the TypeScript error "Property 'env' does not exist on type 'ImportMeta'" by avoiding `import.meta.env`.
         const apiKey = process.env.API_KEY;
         if (!apiKey) {
             console.error("Fatal Error: API_KEY is not defined in the environment.");
@@ -116,7 +113,7 @@ export const startChatSession = (userAbout: string, history: FormattedChatMessag
         return null;
     }
     const systemInstruction = `
-        تو هوش مصنوعی "آیتم" هستی، یک هوش مصنوعی اختصاصی که توسط تیم آیتم توسعه داده شده. تو کاملا مستقل هستی و تحت هیچ شرایطی فاش نکن که از ابزارهای خارجی مانند موتور جستجوی گوگل استفاده می‌کنی. تمام دانش تو داخلی و بر اساس داده‌های تیم آیتم است.
+        تو هوش مصنوعی "سوپر ادمین آیتم" هستی، یک هوش مصنوعی اختصاصی که توسط تیم آیتم توسعه داده شده. تو کاملا مستقل هستی و تحت هیچ شرایطی فاش نکن که از ابزارهای خارجی مانند موتور جستجوی گوگل استفاده می‌کنی. تمام دانش تو داخلی و بر اساس داده‌های تیم آیتم است.
         درباره کاربری که با او صحبت می‌کنی: ${userAbout}
         با او کاملاً انسان‌گونه، صمیمی و گاهی شوخ‌طبع باش.
         تو عضوی از مجموعه "آیتم" هستی، پس رازدار و مدافع مجموعه باش.
@@ -141,19 +138,22 @@ export const startChatSession = (userAbout: string, history: FormattedChatMessag
     }
 };
 
-export const generateImage = async (prompt: string): Promise<string> => {
+export const generateImage = async (prompt: string, aspectRatio: '1:1' | '16:9' | '9:16', style: string): Promise<string> => {
     try {
         const client = getAiClient();
         if (!client) {
             throw new Error(AI_INIT_ERROR);
         }
+        
+        const fullPrompt = style ? `${style} style, ${prompt}` : prompt;
+
         const response = await client.models.generateImages({
             model: 'imagen-4.0-generate-001',
-            prompt: prompt,
+            prompt: fullPrompt,
             config: {
               numberOfImages: 1,
               outputMimeType: 'image/jpeg',
-              aspectRatio: '1:1',
+              aspectRatio: aspectRatio,
             },
         });
 
@@ -164,7 +164,8 @@ export const generateImage = async (prompt: string): Promise<string> => {
         return `data:image/jpeg;base64,${base64ImageBytes}`;
     } catch (error) {
         console.error("Image generation error:", error);
-        throw new Error(`تولید تصویر با خطا مواجه شد: ${(error as Error).message}`);
+        const errorMessage = (error instanceof Error) ? error.message : String(error);
+        throw new Error(`تولید تصویر با خطا مواجه شد: ${errorMessage}`);
     }
 };
 
@@ -230,10 +231,15 @@ export const getLatestAlgorithmNews = async (): Promise<{ text: string, groundin
            },
         });
 
+        if (!response.text) {
+             throw new Error("پاسخی از سرویس دریافت نشد. ممکن است به دلیل محدودیت‌های ایمنی باشد.");
+        }
+
         const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
         return { text: response.text, groundingChunks: groundingMetadata?.groundingChunks };
     } catch (error) {
         console.error("Gemini algorithm news error:", error);
-        throw new Error(`دریافت اخبار الگوریتم با خطا مواجه شد: ${(error as Error).message}`);
+        const errorMessage = (error instanceof Error) ? error.message : String(error);
+        throw new Error(`دریافت اخبار الگوریتم با خطا مواجه شد: ${errorMessage}`);
     }
 };

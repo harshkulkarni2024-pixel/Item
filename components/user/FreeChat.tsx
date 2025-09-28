@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, ChatMessage } from '../../types';
 import { startChatSession, AI_INIT_ERROR } from '../../services/geminiService';
@@ -18,6 +17,7 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [chat, setChat] = useState<Chat | null>(null);
     const chatEndRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         const history = getChatHistory(user.user_id);
@@ -30,6 +30,9 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
 
         if (session) {
             setChat(session);
+        } else {
+            // If session fails, show an initial error message in chat
+             setMessages([{ sender: 'ai', text: AI_INIT_ERROR }]);
         }
         setMessages(history);
     }, [user.about_info, user.user_id]);
@@ -37,6 +40,16 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isLoading]);
+    
+    // Auto-resize textarea
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            const scrollHeight = textarea.scrollHeight;
+            textarea.style.height = `${scrollHeight}px`;
+        }
+    }, [input]);
 
     const handleSend = async () => {
         if (!input.trim() || isLoading || !chat) return;
@@ -137,7 +150,7 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
     return (
         <div className="h-full flex flex-col max-w-3xl mx-auto animate-fade-in">
             <div className="text-center mb-4">
-                <h1 className="text-3xl font-bold text-white">گفتگو با هوش مصنوعی آیتم</h1>
+                <h1 className="text-3xl font-bold text-white">گفتگو با هوش مصنوعی سوپر ادمین آیتم</h1>
                 <p className="text-sm text-slate-400">شما {remainingMessages > 0 ? remainingMessages : 0} پیام دیگر برای امروز دارید.</p>
             </div>
             <div className="flex-1 overflow-y-auto bg-slate-800 p-4 rounded-lg border border-slate-700 mb-4">
@@ -152,13 +165,19 @@ const FreeChat: React.FC<FreeChatProps> = ({ user, onUserUpdate }) => {
                     <Icon name="send" className="w-6 h-6"/>
                 </button>
                 <div className="relative flex-1">
-                    <input
-                        type="text"
+                    <textarea
+                        ref={textareaRef}
+                        rows={1}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                        onKeyPress={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSend();
+                            }
+                        }}
                         placeholder="پیام خود را تایپ کنید..."
-                        className="w-full pr-4 pl-24 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                        className="w-full pl-4 pr-24 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none overflow-y-auto max-h-32"
                         disabled={isLoading || remainingMessages <= 0 || !chat}
                     />
                     <VoiceInput onTranscript={setInput} disabled={isLoading || remainingMessages <= 0 || !chat} />

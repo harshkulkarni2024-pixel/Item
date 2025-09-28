@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { generateStoryScenarioStream } from '../../services/geminiService';
@@ -77,7 +76,7 @@ const StoryGenerator: React.FC<StoryGeneratorProps> = ({ user, onUserUpdate }) =
                             value={idea}
                             onChange={(e) => setIdea(e.target.value)}
                             placeholder="مثلاً: آنباکسینگ محصول جدید، یک روز از زندگی من، یا پاسخ به سوالات مخاطبان..."
-                            className="w-full h-32 p-4 ps-4 pe-20 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
+                            className="w-full h-32 p-4 pe-4 ps-20 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:outline-none resize-none"
                             disabled={isLoading}
                         />
                         <VoiceInput onTranscript={setIdea} disabled={isLoading} />

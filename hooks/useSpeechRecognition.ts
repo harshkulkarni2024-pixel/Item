@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 
 // Type definitions for the Web Speech API, which are not standard in all TypeScript environments.
@@ -77,15 +76,19 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
     rec.interimResults = true;
 
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      const liveTranscript = Array.from(event.results)
+      // Rebuild the full transcript from the results list on each event.
+      // This correctly handles both interim and final results without duplication.
+      const fullTranscript = Array.from(event.results)
         .map(result => result[0])
         .map(result => result.transcript)
         .join('');
-      setTranscript(liveTranscript);
+      setTranscript(fullTranscript);
     };
     
     rec.onerror = (event: SpeechRecognitionErrorEvent) => {
-      setError(event.error);
+      if (event.error !== 'no-speech') { // Ignore no-speech errors which are common
+          setError(event.error);
+      }
       setIsListening(false);
     };
 
@@ -96,15 +99,23 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
     setRecognition(rec);
 
     return () => {
-      rec.stop();
+      if (rec) {
+          rec.stop();
+      }
     };
   }, [isSupported]);
   
   const startListening = useCallback(() => {
     if (recognition && !isListening) {
       setTranscript('');
-      recognition.start();
-      setIsListening(true);
+      try {
+        recognition.start();
+        setIsListening(true);
+        setError(null);
+      } catch (e) {
+        console.error("Speech recognition could not start.", e);
+        setError("Could not start speech recognition.");
+      }
     }
   }, [recognition, isListening]);
 

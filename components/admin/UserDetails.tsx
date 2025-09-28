@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, PostScenario, PostIdea } from '../../types';
 import * as db from '../../services/dbService';
@@ -27,7 +26,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
 
     const refreshData = useCallback(() => {
         setPlan(db.getPlanForUser(user.user_id)?.content || '');
-        setReport(db.getReportForUser(user.user_id)?.content || '');
+        setReport(db.getReportsForUser(user.user_id).map(r => `تاریخ: ${new Date(r.timestamp).toLocaleDateString('fa-IR')}\n${r.content}`).join('\n\n---\n\n') || '');
         setScenarios(db.getScenariosForUser(user.user_id));
         setIdeas(db.getIdeasForUser(user.user_id));
         onUpdate();
@@ -49,11 +48,12 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
         if (activeTab === 'plans') db.savePlanForUser(user.user_id, plan);
         if (activeTab === 'reports') db.saveReportForUser(user.user_id, report);
         setIsEditing(false);
+        refreshData();
     };
 
     const handleDelete = (type: 'plan' | 'report', id: number) => {
         const typeInFarsi = type === 'plan' ? 'برنامه' : 'گزارش';
-        if (window.confirm(`آیا از حذف این ${typeInFarsi} مطمئن هستید؟`)) {
+        if (window.confirm(`آیا از حذف تمام ${typeInFarsi}‌های این کاربر مطمئن هستید؟`)) {
             if (type === 'plan') db.deletePlanForUser(id);
             if (type === 'report') db.deleteReportForUser(id);
         }
@@ -114,7 +114,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
                     <div>
                         {isEditing ? (
                             <div className="relative">
-                                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full h-64 bg-slate-900 p-2 pe-20 rounded" placeholder={placeholder}></textarea>
+                                <textarea value={content} onChange={(e) => setContent(e.target.value)} className="w-full h-64 bg-slate-900 p-2 ps-20 pe-4 rounded" placeholder={placeholder}></textarea>
                                 <VoiceInput onTranscript={setContent} />
                             </div>
                         ) : (
@@ -140,7 +140,7 @@ const UserDetails: React.FC<UserDetailsProps> = ({ user, onBack, onUpdate }) => 
                             <h3 className="font-bold mb-2">افزودن سناریوی جدید</h3>
                             <input type="number" placeholder="شماره سناریو" value={newScenario.number} onChange={e => setNewScenario({...newScenario, number: e.target.value})} className="w-full bg-slate-700 p-2 rounded mb-2" />
                              <div className="relative">
-                                <textarea placeholder="محتوای سناریو" value={newScenario.content} onChange={e => setNewScenario({...newScenario, content: e.target.value})} className="w-full h-24 bg-slate-700 p-2 pe-20 rounded mb-2"></textarea>
+                                <textarea placeholder="محتوای سناریو" value={newScenario.content} onChange={e => setNewScenario({...newScenario, content: e.target.value})} className="w-full h-24 bg-slate-700 p-2 ps-20 pe-4 rounded mb-2"></textarea>
                                 <VoiceInput onTranscript={(text) => setNewScenario(prev => ({...prev, content: text}))} />
                              </div>
                             <button onClick={handleAddScenario} className="bg-violet-600 px-4 py-2 rounded">افزودن سناریو</button>
